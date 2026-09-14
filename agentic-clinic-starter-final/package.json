@@ -1,0 +1,7 @@
+{
+  "name": "clinic-schedule-baseline",
+  "private": true,
+  "type": "module",
+  "scripts": {"start": "node app.mjs", "test": "node --test"},
+  "engines": {"node": ">=22"}
+}
