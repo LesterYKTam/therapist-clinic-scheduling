@@ -177,7 +177,12 @@ for that issue, or cancel the session, regardless of what the system proposed.
   other implementation-level concern.
 
 ## 9. Session location and resources — owner addition, 2026-09-14
-Clinic sessions must reserve a room. All rooms are interchangeable and shared across admins and pods; a room cannot host overlapping committed sessions. Draft changes must not alter committed room reservations before explicit admin commit. This supersedes section 7's original assumption that separate pods never conflict.
+Clinic sessions must reserve a room. Initially there are 15 rooms; room inventory must be configurable in the system. All rooms are interchangeable and shared across admins and pods; a room cannot host overlapping committed sessions. Draft changes must not alter committed room reservations before explicit admin commit. This supersedes section 7's original assumption that separate pods never conflict.
 
-Some sessions occur at the client's home and do not need a clinic room. The admin books a longer session interval to accommodate commuting. No separate travel-time calculation, routing, or commute buffer is required now. The booked interval blocks the therapist's availability in full. Separate travel accounting is out of current scope; Q-011 retains only the unresolved weekly-cap interpretation for the longer booked interval.
+Some sessions occur at the client's home and do not need a clinic room. The admin books a longer session interval to accommodate commuting. No separate travel-time calculation, routing, or commute buffer is required now. The booked interval blocks the therapist's availability in full. Home visits follow normal session rules: the full admin-booked duration is used for therapist overlap checks and weekly hours caps. No separate commute accounting is required.
 
+
+
+Room removal is blocked while future committed sessions reserve the room. The system shows the blocking bookings; it must not silently move or cancel them. Those bookings must be reassigned before removal succeeds (D-B004).
+
+Manual override may propose an unavailable or over-cap assigned therapist, but any resulting conflict becomes an outstanding draft issue. Admin must resolve all outstanding issues before commit (D-B005); alerts do not authorize committing invalid assignments.

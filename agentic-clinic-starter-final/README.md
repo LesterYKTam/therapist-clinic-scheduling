@@ -60,3 +60,9 @@ Do not tell the agent to "build the app" yet.
 
 ## Implemented Sprint 1 demo
 See [DEMO.md](DEMO.md) for setup and repeatable checks, and [SPRINT_REVIEW.md](SPRINT_REVIEW.md) for current delivery status.
+
+## Sprint 2
+Shared room management and clinic/home locations are implemented. See [SPRINT_2_REVIEW.md](SPRINT_2_REVIEW.md) and [DEMO.md](DEMO.md) for current status and setup. Local persistence uses Node 24.13.0 built-in SQLite.
+
+## Complete UI/UX prototype (Sprint 3)
+Run `node prototype-server.mjs` and open http://127.0.0.1:3001. See [SPRINT_3_REVIEW.md](SPRINT_3_REVIEW.md) for the normal setup and disruption walkthrough. Prototype actions are browser-memory only and do not modify the existing port-3000 app/database.

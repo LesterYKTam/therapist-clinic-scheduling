@@ -68,3 +68,12 @@ Blocking/high-impact:
 
 Sprint complete:
 - stop implementation and run milestone review.
+
+## Stage announcements — owner-approved communication preference
+Post only at the start of each sprint stage. Use this exact format, substituting the sprint number and stage: "======     [YYYY-MM-DD HH:mm America/Toronto] Sprint 2 Implementation started     ======". Text posts are sufficient. Do not announce stage endings. This supersedes the earlier spoken/start-and-end preference.
+
+## Cost-conscious delegation — owner-approved
+Prefer lower-cost agents for routine work: Terra for most implementation and verification, Luna for small bounded chores. Give focused handoffs rather than full conversation history. Main PM owns product decisions, authoritative backlog transitions and final review. Do not duplicate the worker's work; inspect concise evidence and escalate difficult work only when needed. Avoid unnecessary parallel agents. User requested this delegation policy (D-P029).
+
+## Candid recommendations — owner preference
+Proactively explain material tradeoffs and recommend a better option when warranted; do not agree automatically. Owner explicitly requested pushback when PM disagrees or sees a better idea.

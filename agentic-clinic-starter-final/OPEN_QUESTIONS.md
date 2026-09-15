@@ -70,11 +70,28 @@ All rooms are interchangeable and shared across admins/pods. Room reservations r
 
 ## Q-011 — Longer home-session duration and weekly caps
 Impact: HIGH
-Status: OPEN — narrowed by D-B002
-Blocks: US-008 scheduling integration
-Admin enters a longer session interval including commute; no separate travel buffer is calculated. Should that full booked duration count toward the weekly hours cap? Existing session-hours rule suggests yes, but this interpretation is not yet explicitly confirmed for commute-inclusive bookings.
-
+Status: RESOLVED (D-B003)
+Home visits are treated like normal sessions. The full admin-booked interval, including any extra duration entered by the admin, is used for therapist overlap checks and weekly hours caps. No separate travel calculation or accounting.
 ## Q-012 — Travel calculation
 Impact: HIGH
 Status: RESOLVED / deferred out of scope, 2026-09-14 (D-B002)
 No automatic travel calculation required. Admin accounts for commute through longer booked duration. No routing, addresses, or separate commute fields needed now.
+
+## Q-013 — Removing rooms with existing bookings
+Impact: HIGH
+Status: RESOLVED (D-B004)
+Block removal while future committed sessions reserve the room, and show blocking bookings. Bookings must be reassigned first. No automatic rescheduling or cancellation.
+
+## UX-first review handling (D-P023)
+Q-001–009 remain OPEN for production. They do not automatically block a labelled scripted prototype: show scenario-only assumptions and invite decisions in context. UX-002 covers office/calendar, leave lifecycle and batch assumptions; UX-003 covers override, preference and cascade assumptions; UX-004 covers abandon/commit and stale shared-room scenarios. Prototype approval alone does not resolve these questions; record specific owner answers as decisions before changing production criteria.
+
+## Q-014 — Commit authority for manually created scheduling conflicts
+Impact: HIGH
+Status: RESOLVED (D-B005)
+Blocks: manual conflict commit behavior; production US-005/006
+Owner requested free manual choices including assigned therapists who are unavailable or over weekly cap, with alerts for new conflicts. Owner confirmed all outstanding issues must be resolved before commit. Manual conflicts remain draft issues; no exception bypass.
+
+## Q-015 — Normal standing schedule setup details
+Impact: HIGH
+Status: OPEN
+Owner requests UI for normal schedule setup. Prototype will demonstrate selecting an existing synthetic client, assigned therapist, weekly day/time/duration, location/room and explicit save preview. Production recurrence horizon, holiday exceptions, initial assignment management and edits to existing series remain to be refined through UX review.
