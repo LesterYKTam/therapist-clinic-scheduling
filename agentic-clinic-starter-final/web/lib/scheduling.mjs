@@ -426,7 +426,44 @@ export function boundedResolutionProposal(data,pod) {
   return {mode:'bounded',baseRevision:data.revision,cascadeDepth:maxDepth,proposed,unresolved:engine.issues(),stops,allDraftChanges:structuredClone(changes)};
 }
 
-export function withConflicts(data) { return { ...data, conflicts: blockingLeaveConflicts(data), historicalAlerts: historicalLeaveAlerts(data), draftIssues: Object.fromEntries((data.drafts||[]).map((draft)=>[draft.pod,draftIssues(data,draft.pod)])) }; }
+const stableJson = (value) => JSON.stringify(value, (key, item) => item && typeof item === 'object' && !Array.isArray(item) ? Object.fromEntries(Object.keys(item).sort().map((name) => [name, item[name]])) : item);
+/** Pure-JS 106-bit hash (two cyrb53 lanes); shared by server and client bundles, so no node:crypto. */
+function hashText(text) {
+  const lane = (seed) => {
+    let h1 = 0xdeadbeef ^ seed, h2 = 0x41c6ce57 ^ seed;
+    for (let i = 0; i < text.length; i++) { const c = text.charCodeAt(i); h1 = Math.imul(h1 ^ c, 2654435761); h2 = Math.imul(h2 ^ c, 1597334677); }
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+    return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(16);
+  };
+  return `${lane(1)}-${lane(2)}-${text.length}`;
+}
+/**
+ * BUG-014: fingerprint of every input an Auto resolve proposal for `pod` depends on. It covers the pod's committed sessions, series,
+ * leave, people and draft changes, clinic-wide rooms and config, and the room reservations of other pods' committed sessions (room
+ * clashes are clinic-wide). Unrelated writes elsewhere (notifications, other pods' people or leave) do not change it.
+ */
+export function proposalFingerprint(data, pod) {
+  const byId = (a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+  const clients = data.clients.filter((item) => item.pod === pod);
+  const clientIds = new Set(clients.map((item) => item.id));
+  const therapists = data.therapists.filter((item) => item.pod === pod);
+  const therapistIds = new Set(therapists.map((item) => item.id));
+  const draft = (data.drafts || []).find((item) => item.pod === pod);
+  return hashText(stableJson({
+    clients: clients.slice().sort(byId), therapists: therapists.slice().sort(byId),
+    sessions: data.sessions.filter((item) => clientIds.has(item.client)).sort(byId),
+    series: data.series.filter((item) => clientIds.has(item.client)).sort(byId),
+    leaves: (data.leaves || []).filter((item) => item.pod === pod || therapistIds.has(item.therapist)).sort(byId),
+    draftChanges: draft?.changes || [],
+    rooms: data.rooms, config: data.config,
+    otherRoomBookings: data.sessions.filter((item) => !clientIds.has(item.client) && item.location === 'clinic').map((item) => ({ id: item.id, date: item.date, time: item.time, minutes: item.minutes, room: item.room })).sort(byId)
+  }));
+}
+/** True when a pod's pending proposal no longer matches its inputs (or predates fingerprints). */
+export const proposalIsStale = (data, pod) => { const proposal = (data.drafts || []).find((item) => item.pod === pod)?.proposal; return !!proposal && proposal.fingerprint !== proposalFingerprint(data, pod); };
+
+export function withConflicts(data) { return { ...data, conflicts: blockingLeaveConflicts(data), historicalAlerts: historicalLeaveAlerts(data), proposalStale: Object.fromEntries((data.drafts||[]).filter((draft)=>draft.proposal).map((draft)=>[draft.pod,proposalIsStale(data,draft.pod)])), draftIssues: Object.fromEntries((data.drafts||[]).map((draft)=>[draft.pod,draftIssues(data,draft.pod)])) }; }
 export function overlaps(a, b, config) { const [as, ae] = interval(a, config); const [bs, be] = interval(b, config); return as < be && bs < ae; }
 export function weekday(date) { const day = new Date(parseDate(date)).getUTCDay(); return day || 7; }
 export function weekKey(date, weekStart = 1) {
@@ -464,7 +501,7 @@ export function validateState(data, {allowHistoric = true} = {}) {
   if (new Set(data.drafts.map((draft) => draft.pod)).size !== data.drafts.length) throw new Error('Only one shared schedule draft is allowed per pod.');
   for (const draft of data.drafts) {
     if (!draft.id || !data.pods.some((pod) => pod.id === draft.pod) || !Array.isArray(draft.changes) || typeof draft.autoResolveRun !== 'boolean' || new Set(draft.changes.map((change)=>change.sessionId)).size !== draft.changes.length) throw new Error('Invalid unfinished schedule draft.');
-    if (draft.proposal && (!draft.autoResolveRun || !Number.isInteger(draft.proposal.sourceRevision) || !Array.isArray(draft.proposal.proposed) || !Array.isArray(draft.proposal.allDraftChanges) || !Array.isArray(draft.proposal.unresolved) || !Array.isArray(draft.proposal.stops))) throw new Error('Invalid Auto resolve proposal.');
+    if (draft.proposal && (!draft.autoResolveRun || !(typeof draft.proposal.fingerprint==='string'||Number.isInteger(draft.proposal.sourceRevision)) || !Array.isArray(draft.proposal.proposed) || !Array.isArray(draft.proposal.allDraftChanges) || !Array.isArray(draft.proposal.unresolved) || !Array.isArray(draft.proposal.stops))) throw new Error('Invalid Auto resolve proposal.');
     for (const change of draft.changes) if (!change.sessionId || !['add','cancel','assign','reschedule'].includes(change.kind) || (change.kind==='add'&&(!change.session||change.session.id!==change.sessionId||!data.clients.some((client)=>client.id===change.session.client&&client.pod===draft.pod)||Boolean(change.series)!==Boolean(change.session.seriesId)||(change.series&&change.series.id!==change.session.seriesId))) || (change.kind==='assign'&&!change.therapist) || (change.kind==='reschedule'&&(!change.therapist||!change.date||!change.time||!Number.isInteger(change.minutes)||!['clinic','home'].includes(change.location)||(!change.room&&change.location==='clinic')||(change.location==='home'&&change.room!==null)))) throw new Error('Invalid draft schedule change.');
   }
   const names = new Set();

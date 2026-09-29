@@ -751,7 +751,7 @@ Description: Reverse the BUG-011 block on new leave. Edits and withdrawals of ex
 Source / reason: D-B015
 Acceptance criteria: New leave saves while the pod draft exists. The draft's issue list includes the new conflicts. A pending Auto resolve proposal becomes stale and cannot be applied. Amending or withdrawing leave is still rejected during a draft. The BUG-011 test is updated to the approved rule.
 Priority: P1
-Status: READY
+Status: DONE (2026-09-29). 51/51 tests and the build pass. QA reviewed the code and checked it in the DEV browser: new leave saves during a draft, amend and withdraw stay blocked, and DEV was restored afterwards.
 Sprint: S7
 Dependencies: BUG-012
 Discovery class: BLOCKING
@@ -775,7 +775,7 @@ Description: Proposal staleness compares the clinic-wide revision, so any write 
 Source / reason: Discovery G6
 Acceptance criteria: Only inputs relevant to the pod's proposal make it stale: that pod's sessions, leave, people or draft, or clinic-wide rooms and config. After a relevant change invalidates the proposal, the admin can run Auto resolve again within the same draft. Covered by tests.
 Priority: P1
-Status: READY
+Status: DONE (2026-09-29). Staleness now uses a per-pod input fingerprint, and Auto resolve can re-run after a relevant input changes. QA confirmed the fingerprint is complete.
 Sprint: S7
 Dependencies: BUG-012
 Discovery class: ADJACENT

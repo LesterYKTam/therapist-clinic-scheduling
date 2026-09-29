@@ -1,7 +1,7 @@
 import pg from 'pg';
 import {
   initialState, validateState, blockersForSetup, createOccurrences,
-  todayInZone, addDays, datesWeekly, localInstant, leaveInterval, blockingLeaveConflicts, draftCandidate, draftIssues, boundedResolutionProposal
+  todayInZone, addDays, datesWeekly, localInstant, leaveInterval, blockingLeaveConflicts, draftCandidate, draftIssues, boundedResolutionProposal, proposalFingerprint
 } from './scheduling.mjs';
 
 const clone = (value) => structuredClone(value);
@@ -140,7 +140,6 @@ export class PostgresClinicStore {
     return this.transaction(revision, (state) => {
       const therapist = state.therapists.find((item) => item.id === String(request.therapist || '') && item.active);
       if (!therapist) throw new Error('Choose an active therapist.');
-      if (state.drafts.some((draft) => draft.pod === therapist.pod)) throw new Error('Commit or discard this pod’s shared schedule draft before recording more leave.');
       const leave = { id: uid('leave'), pod: therapist.pod, therapist: therapist.id,
         startDate: String(request.startDate || ''), startTime: String(request.startTime || ''),
         endDate: String(request.endDate || ''), endTime: String(request.endTime || '') };
@@ -211,11 +210,13 @@ export class PostgresClinicStore {
     return this.transaction(revision, (state) => {
       if (!state.pods.some((item) => item.id === pod)) throw new Error('Choose a valid pod.');
       let draft = state.drafts.find((item) => item.pod === pod);
-      if (draft?.autoResolveRun) throw new Error('Auto resolve has already run for this draft. Commit or discard the draft before running it again.');
+      const fingerprint = proposalFingerprint(state, pod);
+      if (draft?.autoResolveRun && draft.autoResolveFingerprint === fingerprint) throw new Error('Auto resolve has already run for this draft and nothing relevant has changed. Change the draft or the pod’s schedule inputs before running it again.');
       if (!draft) { draft = { id: uid('draft'), pod, changes: [], autoResolveRun: false }; state.drafts.push(draft); }
       const plan = boundedResolutionProposal(state, pod);
       draft.autoResolveRun = true;
-      draft.proposal = { ...plan, sourceRevision: state.revision + 1 };
+      draft.autoResolveFingerprint = fingerprint;
+      draft.proposal = { ...plan, fingerprint };
       return clone(draft.proposal);
     });
   }
@@ -224,7 +225,7 @@ export class PostgresClinicStore {
     return this.transaction(revision, (state) => {
       const draft = state.drafts.find((item) => item.pod === pod);
       if (!draft?.proposal) throw new Error('There is no Auto resolve proposal to apply.');
-      if (draft.proposal.sourceRevision !== state.revision) throw new Error('The proposal is stale. Discard the suggestions and continue editing this draft manually.');
+      if (draft.proposal.fingerprint !== proposalFingerprint(state, pod)) throw new Error('The proposal is stale. Discard the suggestions and continue editing this draft manually.');
       draft.changes = clone(draft.proposal.allDraftChanges);
       const applied = clone(draft.proposal.proposed);
       delete draft.proposal;
@@ -319,7 +320,7 @@ export class PostgresClinicStore {
     });
   }
 
-  /** Revert one staged change (even for a session that has since started). Other staged changes are kept; a pending proposal goes stale via the revision bump. */
+  /** Revert one staged change (even for a session that has since started). Other staged changes are kept; a pending proposal goes stale because the draft changes are part of its fingerprint. */
   async removeDraftChange(pod, sessionId, revision) {
     return this.transaction(revision, (state) => {
       if (!state.pods.some((item) => item.id === pod)) throw new Error('Choose a valid pod.');
@@ -410,7 +411,7 @@ export class PostgresClinicStore {
 
   async updateSetup(next, revision) {
     return this.transaction(revision, (state) => {
-      const after = clone(next); delete after.conflicts; delete after.draftIssues; after.schema = 2; after.revision = state.revision;
+      const after = clone(next); delete after.conflicts; delete after.draftIssues; delete after.proposalStale; after.schema = 2; after.revision = state.revision;
       if (JSON.stringify(after.leaves) !== JSON.stringify(state.leaves)) throw new Error('Setup cannot alter recorded leave.');
       if (JSON.stringify(after.drafts) !== JSON.stringify(state.drafts)) throw new Error('Setup cannot alter shared schedule drafts.');
       if (JSON.stringify(after.notifications) !== JSON.stringify(state.notifications)) throw new Error('Setup cannot alter notification tasks.');

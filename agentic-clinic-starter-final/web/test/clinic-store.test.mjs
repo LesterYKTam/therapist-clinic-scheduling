@@ -70,7 +70,7 @@ test('new bookings cannot knowingly overlap recorded leave, while touching its b
     assert.equal((await store.read()).sessions.length,1);
   } finally { await store.close(); }
 });
-test('recorded leave can be amended or withdrawn only when its pod has no shared draft', async () => {
+test('recorded leave can be amended or withdrawn only when its pod has no shared draft; new leave is allowed (D-B015)', async () => {
   await clean(); const store=await open(); try {
     let state=await store.read();
     await store.commit(oneOff(),state.revision);
@@ -83,8 +83,9 @@ test('recorded leave can be amended or withdrawn only when its pod has no shared
     state=await store.read();
     await assert.rejects(()=>store.amendLeave('a',leaveId,{startDate:'2030-01-07',startTime:'10:00',endDate:'2030-01-07',endTime:'11:00'},state.revision),/shared schedule draft/);
     await assert.rejects(()=>store.withdrawLeave('a',leaveId,state.revision),/shared schedule draft/);
-    await assert.rejects(()=>store.recordLeave({therapist:'a-t2',startDate:'2030-01-08',startTime:'09:00',endDate:'2030-01-08',endTime:'10:00'},state.revision),/shared schedule draft/);
-    assert.equal((await store.read()).leaves.length,1);
+    await store.recordLeave({therapist:'a-t1',startDate:'2030-01-14',startTime:'09:00',endDate:'2030-01-14',endTime:'10:00'},state.revision);
+    assert.equal((await store.read()).leaves.length,2);
+    state=await store.read();
     await store.discardDraft('a',state.revision);
     state=await store.read();
     await assert.rejects(()=>store.amendLeave('b',leaveId,{startDate:'2030-01-07',startTime:'10:00',endDate:'2030-01-07',endTime:'11:00'},state.revision),/not found/);
@@ -94,7 +95,7 @@ test('recorded leave can be amended or withdrawn only when its pod has no shared
     assert.equal(state.sessions[0].therapist,'a-t1');
     await store.withdrawLeave('a',leaveId,state.revision);
     state=await store.read();
-    assert.equal(state.leaves.length,0);
+    assert.equal(state.leaves.length,1); // only the leave recorded during the draft remains
     assert.equal(state.sessions.length,1);
   } finally { await store.close(); }
 });
@@ -220,15 +221,19 @@ test('Auto resolve preview is durable, one-run, stale-safe, and only commits aft
     state=await store.read();
     assert.equal(state.sessions[0].therapist,'a-t1');
     assert.equal(state.drafts[0].changes.length,0);
-    assert.equal(state.drafts[0].proposal.sourceRevision,state.revision);
+    assert.equal(typeof state.drafts[0].proposal.fingerprint,'string');
     await assert.rejects(()=>store.previewAutoResolve('a',state.revision),/already run/);
-    await store.recordLeave({therapist:'b-t1',startDate:'2030-01-07',startTime:'11:00',endDate:'2030-01-07',endTime:'12:00'},state.revision);
+    await store.recordLeave({therapist:'a-t2',startDate:'2030-01-07',startTime:'11:00',endDate:'2030-01-07',endTime:'12:00'},state.revision);
     state=await store.read();
     await assert.rejects(()=>store.applyAutoResolve('a',state.revision),/stale/);
     await store.discardAutoResolve('a',state.revision);
     state=await store.read();
     assert.equal(state.drafts[0].autoResolveRun,true);
-    await assert.rejects(()=>store.previewAutoResolve('a',state.revision),/already run/);
+    await store.previewAutoResolve('a',state.revision); // BUG-014: changed inputs allow a re-run
+    state=await store.read();
+    await assert.rejects(()=>store.previewAutoResolve('a',state.revision),/already run/); // unchanged inputs do not
+    await store.discardAutoResolve('a',state.revision);
+    state=await store.read();
     await store.stageDraftChange('a',{kind:'assign',sessionId:state.sessions[0].id,therapist:'a-t2'},state.revision);
     state=await store.read();
     await store.commitDraft('a',state.revision);
@@ -805,5 +810,69 @@ test('PDF download uses committed TEST data, includes report columns and totals,
     for (const value of ['STILLWELL', 'Dr José 李', 'Ana 李', 'Date', 'Time', 'Client', 'Duration', 'Location', '2030-01-07', '2030-01-14', '09:00', '10:00', 'Home', 'Total: 150 minutes']) assert.ok(content.includes(value), `PDF should include ${value}`);
     assert.ok(content.indexOf('2030-01-07') < content.indexOf('2030-01-14'));
     assert.equal((await store.report('b-t1', '2030-01')).sessions.length, 0);
+  } finally { await store.close(); }
+});
+
+const leaveA=(more={})=>({therapist:'a-t1',startDate:'2030-01-07',startTime:'09:30',endDate:'2030-01-07',endTime:'10:30',...more});
+async function proposalFixture(store,{withB=false}={}) {
+  let state=await store.read();
+  await store.commit(oneOff(),state.revision);
+  if (withB) { state=await store.read(); await store.commit(oneOff({client:'b-c1',therapist:'b-t1',room:'room-2',time:'14:00'}),state.revision); }
+  state=await store.read();
+  await store.recordLeave(leaveA(),state.revision);
+  state=await store.read();
+  await store.previewAutoResolve('a',state.revision);
+  return store.read();
+}
+test('BUG-014: unrelated pod b writes do not stale pod a’s proposal, and it still applies', async () => {
+  await clean(); const store=await open(); try {
+    let state=await proposalFixture(store,{withB:true});
+    assert.equal(withConflicts(state).proposalStale.a,false);
+    await store.handleNotification('b',state.notifications.find((item)=>item.pod==='b').id,state.revision);
+    state=await store.read();
+    await store.recordLeave({therapist:'b-t1',startDate:'2030-02-04',startTime:'09:00',endDate:'2030-02-04',endTime:'10:00'},state.revision);
+    state=await store.read();
+    assert.equal(withConflicts(state).proposalStale.a,false);
+    const applied=await store.applyAutoResolve('a',state.revision);
+    assert.equal(applied.result.applied.length,1);
+    state=await store.read();
+    assert.equal(state.sessions.find((item)=>item.client==='a-c1').therapist,'a-t1'); // committed schedule untouched until commit
+  } finally { await store.close(); }
+});
+test('BUG-014: a pod a leave, a pod a draft removal, or another pod’s room booking stales the proposal; re-run works', async () => {
+  await clean(); const store=await open(); try {
+    let state=await proposalFixture(store);
+    await store.recordLeave(leaveA({therapist:'a-t2',startTime:'12:00',endTime:'13:00'}),state.revision);
+    state=await store.read();
+    assert.equal(withConflicts(state).proposalStale.a,true);
+    await assert.rejects(()=>store.applyAutoResolve('a',state.revision),/stale/);
+    await store.previewAutoResolve('a',state.revision); // re-run in the same draft
+    state=await store.read();
+    assert.equal(withConflicts(state).proposalStale.a,false);
+    await assert.rejects(()=>store.previewAutoResolve('a',state.revision),/already run/);
+  } finally { await store.close(); }
+});
+test('BUG-014: a pod b room booking stales pod a’s proposal', async () => {
+  await clean(); const store=await open(); try {
+    let state=await proposalFixture(store);
+    await store.commit(oneOff({client:'b-c1',therapist:'b-t1',room:'room-2',time:'09:00'}),state.revision);
+    state=await store.read();
+    assert.equal(withConflicts(state).proposalStale.a,true);
+    await assert.rejects(()=>store.applyAutoResolve('a',state.revision),/stale/);
+    await store.previewAutoResolve('a',state.revision);
+    assert.equal(withConflicts(await store.read()).proposalStale.a,false);
+  } finally { await store.close(); }
+});
+test('D-B015: new pod leave during a draft saves, adds issues, and stales a pending proposal', async () => {
+  await clean(); const store=await open(); try {
+    let state=await proposalFixture(store);
+    assert.equal(draftIssues(state,'a').length,1);
+    await store.recordLeave(leaveA({therapist:'a-t2',startDate:'2030-01-07',startTime:'09:00',endTime:'10:00'}),state.revision);
+    state=await store.read();
+    assert.equal(state.leaves.length,2);
+    assert.equal(state.drafts.length,1);
+    assert.ok(draftIssues(state,'a').length>=1);
+    await assert.rejects(()=>store.applyAutoResolve('a',state.revision),/stale/);
+    assert.equal(state.sessions[0].therapist,'a-t1');
   } finally { await store.close(); }
 });

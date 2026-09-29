@@ -292,3 +292,6 @@ When Auto resolve must move one of a therapist's other sessions to free weekly-c
 Status: APPROVED by explicit owner answer, 2026-09-28 (confirms D-B010)
 
 The clinic has two equal-level admins. Any admin may change any admin's pod assignment, including their own; no additional role, approval step or self-assignment restriction is required. Pod scoping is a working-focus boundary between trusted admins, not a confidentiality control between them. The server still enforces the current assignment on every request.
+
+## PM note on D-B008 — Auto resolve re-runs (2026-09-29)
+This note interprets D-B008 and does not change it. "Auto resolve runs once for an unchanged editing session" means a second run is allowed only after an input relevant to that pod has changed since the last run. Relevant inputs are the pod's people, sessions, leave or draft changes, clinic rooms and config, and other pods' room bookings. Unrelated clinic activity no longer makes a pending proposal stale (BUG-014).
