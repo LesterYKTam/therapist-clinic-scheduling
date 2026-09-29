@@ -128,7 +128,7 @@ Description: An admin can manage only their own pod's people, leave, sessions an
 Source / reason: Owner answers D-B009/D-B010/D-B011; current local DEV uses one trusted administrator context and a freely selectable pod.
 Acceptance criteria: Establish server-trusted admin identity and current pod assignment; provide a config page where any admin can change pod membership; require assignment before pod-specific access; reject cross-pod reads and mutations; prevent another pod's client, therapist, leave or draft from appearing in the admin's management views; continue clinic-wide room collision checks while reducing cross-pod overlap messages to anonymous room/time blockers; allow any admin to manage shared room inventory; apply reassignment on subsequent requests without changing committed records or open drafts; verify two-admin cross-pod, reassignment and tampered pod-ID scenarios.
 Priority: P0
-Status: IN_SPRINT — clinic-managed accounts, protected config page, signed-in scheduling, pod-scoped JSON/PDF/writes/Setup, two-admin and reassignment checks, and production HTTP smoke pass; first-admin bootstrap choice and final interactive acceptance remain
+Status: DONE internally (2026-09-29). The first-admin CLI tool exists; the owner DEV admin is created and assigned to Maple; signed-in end-to-end acceptance passes. Awaiting owner M3 acceptance. UAT is held.
 Sprint: Unassigned
 Dependencies: D-B010/D-B011; first-account bootstrap answer and production authentication integration.
 Discovery class: BLOCKING
@@ -154,7 +154,7 @@ Description: Admin accepts a proposal, chooses another valid therapist/time, or 
 Source / reason: SPEC sections 4–6; S0 scenarios C2–C4
 Acceptance criteria: Each affected session requires an explicit decision; bumps show causal links; decisions use current draft state; manual edits update conflicts live, and a separate Recheck conflicts control reruns validation against the latest shared state. Auto resolve shows the full proposal before it may be applied to the shared draft. Admin may apply or discard just those suggestions, then continue manual edits on top of applied changes. All outstanding conflicts must be resolved before commit (D-B005); stale dependent decisions reopen; committed schedule remains unchanged.
 Priority: P0
-Status: IN_SPRINT — manual draft and proposal review implemented; final historical-conflict policy Q-017 pending
+Status: DONE internally (2026-09-29). Q-017 resolved by D-B012, and QA end-to-end acceptance steps A–J pass. Awaiting owner M3 acceptance.
 Sprint: 6
 Dependencies: US-004; Q-017 historical conflict policy; prior Q-001/002/003/006/007/008 decisions tracked in DECISIONS.md
 Discovery class: BLOCKING
@@ -166,7 +166,7 @@ Description: Publish a completely resolved batch through explicit admin commit, 
 Source / reason: SPEC section 6; S0 scenario C5
 Acceptance criteria: Unresolved issues prevent commit; commit revalidates the latest shared room and pod state and publishes all decisions together, creating notification tasks for affected clients and therapists. Discard draft abandons all uncommitted schedule changes, including applied auto-resolve suggestions, but recorded leave remains and its outstanding issues persist (D-B006). Discard suggestions only rejects the current auto-resolve proposal. Failed commit cannot partially publish changes.
 Priority: P0
-Status: IN_SPRINT — atomic commit/discard and notification tasks implemented; final historical-conflict policy Q-017 pending
+Status: DONE internally (2026-09-29). Atomic commit, discard, grouped notifications and end-to-end acceptance pass. Awaiting owner M3 acceptance.
 Sprint: 6
 Dependencies: US-005; Q-017 historical conflict policy; Q-004/005/009 resolved by D-B006/D-B009
 Discovery class: BLOCKING

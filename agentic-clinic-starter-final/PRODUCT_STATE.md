@@ -208,3 +208,10 @@ Resume with:
 1. End-to-end acceptance of US-005 and US-006 on a TEST-backed dev server on a separate port. Do not commit to DEV, and do not run web:test at the same time.
 2. Write the M3 Sprint Review.
 3. Stop for the owner.
+
+## 2026-09-29 — M3 candidate ready for owner review
+All approved scope is DONE internally. The review, with the owner test script, is in SPRINT_7_REVIEW.md. 75/75 tests and the build pass, and QA's end-to-end acceptance steps A–J pass on a TEST-backed signed-in server.
+- DEV now holds the synthetic demo seed; reset it with `node scripts/seed-demo.mjs --env dev`.
+- The owner's DEV admin is admin@demo.com, assigned to Maple.
+- Sites: localhost:3000 is the demo that skips sign-in; localhost:3001 is signed-in (`next start` with demo mode off).
+- Waiting for the owner's decision: APPROVE / CHANGE / REJECT / EXPERIMENT. On APPROVE: tag milestone/M3, merge to master, and propose the UX polish, then DEBT-001, then UAT planning. UAT stays held until then.
