@@ -19,7 +19,7 @@ test('first-admin bootstrap creates an admin, refuses repeats, validates input, 
     const email = `synthetic-first-${suffix()}@example.invalid`;
     const password = strong();
 
-    await assert.rejects(createFirstAdmin({ name: 'Synthetic', email, password: 'short' }), /at least 12/);
+    await assert.rejects(createFirstAdmin({ name: 'Synthetic', email, password: 'short' }), /at least 8/);
     await assert.rejects(createFirstAdmin({ name: 'Synthetic', email, password, pod: 'no-such-pod' }), /Unknown pod/);
     assert.equal((await authPool.query('SELECT 1 FROM "user" WHERE email=$1', [email])).rowCount, 0, 'rejections create nothing');
 

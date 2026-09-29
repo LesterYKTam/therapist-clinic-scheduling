@@ -298,3 +298,8 @@ This note interprets D-B008 and does not change it. "Auto resolve runs once for 
 
 ## PM note — cross-pod detail in Setup blocker messages (2026-09-29, owner may overrule)
 When a clinic-wide Setup change is blocked by another pod's booking, such as deactivating a shared room or changing the timezone, the error shows that booking's date and time and the shared room. The other pod's client and therapist names and ids are redacted. This is accepted under D-B018: pod scoping is a working-focus boundary between trusted admins, and the date lets the two admins coordinate. If the owner wants strict redaction, the fix is to collapse foreign blockers into a count ("N bookings in another pod").
+
+## D-B019 — Admin password minimum length is 8
+Status: APPROVED by explicit owner instruction, 2026-09-29
+
+Admin account passwords need at least 8 characters, down from 12. This is enforced by Better Auth `minPasswordLength` and by the first-admin CLI tool. Public sign-up remains disabled.

@@ -41,7 +41,7 @@ Owner decision D-B013: the first real admin is created once with a local command
 node scripts/create-first-admin.mjs --env dev
 ```
 
-It asks for full name, email, then the password twice with hidden input (minimum 12 characters). Passwords are never accepted as arguments, environment variables or files. It loads the matching ignored `.local/<env>.env` and creates the user with role admin; public sign-up stays disabled. It prints only email, id and pod. Add `--pod <id>` to assign a pod immediately; otherwise assign one on the protected config page (`/config/admins`) after signing in. The tool refuses to run if any admin already exists; create further admins from the config page while signed in (`--allow-additional` overrides this and is not normally needed). Use `--env test` only for synthetic TEST accounts.
+It asks for full name, email, then the password twice with hidden input (minimum 8 characters, D-B019). Passwords are never accepted as arguments, environment variables or files. It loads the matching ignored `.local/<env>.env` and creates the user with role admin; public sign-up stays disabled. It prints only email, id and pod. Add `--pod <id>` to assign a pod immediately; otherwise assign one on the protected config page (`/config/admins`) after signing in. The tool refuses to run if any admin already exists; create further admins from the config page while signed in (`--allow-additional` overrides this and is not normally needed). Use `--env test` only for synthetic TEST accounts.
 
 See ACCESS_SETUP.md for more detail.
 

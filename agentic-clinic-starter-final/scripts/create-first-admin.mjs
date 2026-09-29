@@ -7,7 +7,7 @@ import { createInterface } from 'node:readline';
 import { Writable } from 'node:stream';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const MIN_PASSWORD_LENGTH = 12; // must match emailAndPassword.minPasswordLength in web/lib/auth.ts
+const MIN_PASSWORD_LENGTH = 8; // must match emailAndPassword.minPasswordLength in web/lib/auth.ts
 
 export async function createFirstAdmin({ name, email, password, pod, allowAdditional = false }) {
   name = String(name ?? '').trim();
