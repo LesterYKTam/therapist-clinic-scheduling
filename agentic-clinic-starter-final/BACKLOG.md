@@ -716,3 +716,156 @@ Status: DONE (owner set the 70% usage stop, D-P043)
 Sprint: Takeover
 Dependencies: D-P042
 Discovery class: ADJACENT
+
+## S7 — Takeover fixes and approved changes (Claude team, 2026-09-28)
+The order below is the planned delivery order. The PM verifies each item and QA checks it independently before it is marked DONE.
+
+### BUG-012
+Type: BUG
+Title: Scheduling engine is quadratic and unusable at clinic scale
+Description: validateState and draftIssues compare every session with every other session across the clinic. podView computes workable options for every pod session on every request, and the resolver recomputes full validation inside nested loops. Measured: 720 sessions take about 1 s per validation (reproduced by the PM). 2,400 sessions take about 11 s per validation. At 2,400 sessions Auto resolve does not finish within 10 minutes, and a 360-session page load took about 55 s. All of this runs while the write lock is held on the whole clinic.
+Source / reason: QA structural review, 2026-09-28; owner question D-P045
+Acceptance criteria: Business behaviour unchanged, with every existing test passing unmodified. Overlap checks use per-therapist, per-client and per-room sorted buckets (or an equivalent), not all-pairs comparison. Validation checks future sessions plus touched ones; history cannot create new violations. Workable options are computed only for issue sessions, on demand. A repeatable scale test with 5 pods, 30 therapists, 100 clients, 15 rooms, 2,400 future sessions and one year of history meets: page state build under 1 s, full validation under 500 ms, and Auto resolve for a two-week leave affecting about 12 sessions under 5 s.
+Priority: P0
+Status: READY
+Sprint: S7
+Dependencies: none
+Discovery class: BLOCKING
+
+### CHANGE-001
+Type: CHANGE
+Title: Historical leave conflicts become non-blocking alerts (D-B012)
+Description: Started sessions overlapping recorded leave stay visible as historical alerts but do not block draft commits or direct scheduling.
+Source / reason: D-B012 (Q-017)
+Acceptance criteria: A historical overlap is shown as a distinct alert and does not count toward the blocking conflict total. Draft commit and direct commit succeed while only historical alerts remain. The booking and the leave record are unchanged. Future leave conflicts still block commit. Regression tests cover both the draft and the direct path.
+Priority: P0
+Status: READY
+Sprint: S7
+Dependencies: BUG-012
+Discovery class: BLOCKING
+
+### CHANGE-002
+Type: CHANGE
+Title: Allow recording new leave during an open pod draft (D-B015)
+Description: Reverse the BUG-011 block on new leave. Edits and withdrawals of existing leave stay blocked.
+Source / reason: D-B015
+Acceptance criteria: New leave saves while the pod draft exists. The draft's issue list includes the new conflicts. A pending Auto resolve proposal becomes stale and cannot be applied. Amending or withdrawing leave is still rejected during a draft. The BUG-011 test is updated to the approved rule.
+Priority: P1
+Status: READY
+Sprint: S7
+Dependencies: BUG-012
+Discovery class: BLOCKING
+
+### BUG-013
+Type: BUG
+Title: A staged change for a now-started session can never be removed
+Description: Once a staged session's start time passes, commit tells the admin to remove that change, but no action exists to remove it, and staging rejects past sessions. The only exit is discarding the whole draft.
+Source / reason: Discovery scenario (b), confirmed by the PM at clinic-store.mjs stageDraftChange and commitDraft
+Acceptance criteria: The admin can remove or revert any single staged change, including one whose session has started. After that, commit succeeds if no other issue remains. Other staged changes are preserved. Covered by a regression test.
+Priority: P0
+Status: READY
+Sprint: S7
+Dependencies: BUG-012
+Discovery class: BLOCKING
+
+### BUG-014
+Type: BUG
+Title: Auto resolve proposal goes stale on unrelated writes and cannot be re-run
+Description: Proposal staleness compares the clinic-wide revision, so any write anywhere invalidates the proposal, even marking a notification handled in another pod. The draft then allows no second Auto resolve run.
+Source / reason: Discovery G6
+Acceptance criteria: Only inputs relevant to the pod's proposal make it stale: that pod's sessions, leave, people or draft, or clinic-wide rooms and config. After a relevant change invalidates the proposal, the admin can run Auto resolve again within the same draft. Covered by tests.
+Priority: P1
+Status: READY
+Sprint: S7
+Dependencies: BUG-012
+Discovery class: ADJACENT
+
+### US-016
+Type: STORY
+Title: Auto resolve sessions held by a 2nd- or 3rd-ranked therapist (D-B014)
+Description: Extend the resolver to leave-affected sessions whose holder is not the client's major therapist.
+Source / reason: D-B014; Discovery G1
+Acceptance criteria: The resolver tries the client's remaining ranked therapists in rank order, excluding the therapist on leave, under the same validity checks. The cascade applies only on the second-choice path, and the final fallback does not cascade. Stop reasons are explained. Tests cover a session held by the 2nd therapist and one held by the 3rd.
+Priority: P1
+Status: READY
+Sprint: S7
+Dependencies: BUG-012
+Discovery class: BLOCKING
+
+### CHANGE-003
+Type: CHANGE
+Title: Deterministic choice of which session to move to free a capped therapist (D-B017)
+Description: Cap-relief displacement currently chooses by id order, which is effectively random.
+Source / reason: D-B017; Discovery S2
+Acceptance criteria: Prefer the candidate whose own relocation needs the fewest further displacements; break ties by the latest in the week. Results are deterministic across runs. Covered by a test.
+Priority: P2
+Status: READY
+Sprint: S7
+Dependencies: BUG-012, US-016
+Discovery class: ADJACENT
+
+### BUG-015
+Type: BUG
+Title: Authenticated users see only generic action errors
+Description: In authenticated mode every POST failure is flattened to "Unable to complete this clinic action", so admins never learn about a room clash, a stale change or a past session. Demo mode shows the real messages.
+Source / reason: QA review D4
+Acceptance criteria: Business-rule validation messages reach the authenticated user. Internal or unexpected errors stay generic and are logged on the server. No data from other pods leaks through a message. Covered by tests.
+Priority: P1
+Status: READY
+Sprint: S7
+Dependencies: none
+Discovery class: ADJACENT
+
+### BUG-016
+Type: BUG
+Title: Demo mode has no production guard
+Description: CLINIC_DEMO_MODE=1 bypasses authentication and returns the whole clinic. Nothing prevents it from being set in a production build.
+Source / reason: QA review D3
+Acceptance criteria: The app refuses to serve when NODE_ENV is production and demo mode is set, or demo mode is otherwise impossible outside local DEV/TEST. Documented. Covered by a test.
+Priority: P1
+Status: READY
+Sprint: S7
+Dependencies: none
+Discovery class: ADJACENT
+
+### CHANGE-004
+Type: CHANGE
+Title: Group notification tasks per person (D-B016)
+Description: A commit creates one notification task per affected person, listing all of that person's changes.
+Source / reason: D-B016
+Acceptance criteria: One task per person per commit, containing before and after details for each affected session. Marking the task handled covers all its sessions. Existing tasks remain readable.
+Priority: P2
+Status: READY
+Sprint: S7
+Dependencies: BUG-012
+Discovery class: ADJACENT
+
+### TASK-011
+Type: TASK
+Title: Missing rule tests
+Description: Add web tests for SPEC rule 1 (assigned therapists only), rule 6 (same pod), no client double-booking, office-hours limits, and the committed conflict indicator staying truthful during a draft (D-B008).
+Source / reason: Discovery R1, R6, R9, D2
+Acceptance criteria: Each rule has a web/test regression. All tests pass.
+Priority: P2
+Status: READY
+Sprint: S7
+Dependencies: none
+Discovery class: ADJACENT
+
+### DEBT-001
+Type: DEBT
+Title: Cleanup pass before UAT
+Description: Items to clean up before UAT:
+- A pg Pool is created per request, and migrate runs on every read.
+- The .mjs modules are untyped (@ts-expect-error).
+- The single 48 KB UI file.
+- The dead legacy root code and the broken root npm start.
+- Stale docs.
+- The storage-model review: single jsonb row versus tables.
+Source / reason: QA structural review; Discovery DOC1/DOC2; D-P045
+Acceptance criteria: Planned as a separate owner-approved sprint after M3 review and before UAT.
+Priority: P2
+Status: BACKLOG
+Sprint: post-M3
+Dependencies: M3 review
+Discovery class: ADJACENT

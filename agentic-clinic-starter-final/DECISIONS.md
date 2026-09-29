@@ -267,3 +267,23 @@ When work stops only because of the D-P043 70% usage guard, the PM resumes on it
 Status: APPROVED by explicit owner answer, 2026-09-28
 
 Review the existing code now. Propose a major structural change only if something is seriously wrong. Otherwise finish development first and do the cleanup pass before UAT.
+
+## D-B014 — Auto resolve for sessions held by a 2nd- or 3rd-ranked therapist
+Status: APPROVED by explicit owner answer, 2026-09-28
+
+When a leave-affected session is held by a client's 2nd- or 3rd-ranked therapist, Auto resolve tries the client's other ranked therapists in rank order: the major first, then the next available, never the therapist on leave. The same validity checks, bounded cascade and third-rank non-cascade rule from SPEC §5 apply.
+
+## D-B015 — New leave may be recorded while a pod draft is open
+Status: APPROVED by explicit owner answer, 2026-09-28 (supersedes BUG-011's block)
+
+Recording new leave is allowed while the pod has an open shared schedule draft, consistent with D-B008. The leave saves immediately, the draft's conflict list refreshes, and any pending Auto resolve proposal becomes stale. Edits or withdrawals of existing leave stay blocked during a draft (D-B009).
+
+## D-B016 — Group notification tasks per person
+Status: APPROVED by explicit owner answer, 2026-09-28
+
+Notification tasks created by a commit are grouped per affected person, one task listing all of that person's changed or cancelled sessions, instead of one task per session per person.
+
+## D-B017 — Which session to move when freeing a capped therapist
+Status: APPROVED by explicit owner answer, 2026-09-28 (resolves the remaining Q-006 displacement-order point)
+
+When Auto resolve must move one of a therapist's other sessions to free weekly-cap hours (SPEC §5 step 3), it prefers the session that is easiest to move: the one whose own relocation needs the fewest further displaced sessions. Ties go to the latest session in that week. The order must be deterministic. Advance notice is not a factor, because nothing changes for clients until the admin commits, and the admin can still override any suggestion.
