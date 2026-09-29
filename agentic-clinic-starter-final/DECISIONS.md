@@ -303,3 +303,13 @@ When a clinic-wide Setup change is blocked by another pod's booking, such as dea
 Status: APPROVED by explicit owner instruction, 2026-09-29
 
 Admin account passwords need at least 8 characters, down from 12. This is enforced by Better Auth `minPasswordLength` and by the first-admin CLI tool. Public sign-up remains disabled.
+
+## D-B014 confirmation — fallback for a session held by the 3rd-ranked therapist
+Status: APPROVED by explicit owner answer, 2026-09-29
+
+For a session held by the 3rd-ranked therapist, the major is the first alternative and may cascade within the clinic depth. The 2nd-ranked therapist is the last alternative and is tried only at the original time, without cascading. This matches the US-016 implementation.
+
+## D-B020 — All admins may read all records; writes stay pod-scoped
+Status: APPROVED by explicit owner answer, 2026-09-29 (supersedes the read side of D-B009/D-B010 and the redaction rule behind BUG-015/BUG-017)
+
+Every admin may view every pod's records read-only. Other pods' names, bookings and details need not be hidden or redacted. Changes to people, leave, sessions and drafts remain limited to the admin's currently assigned pod, and clinic-wide rooms and config remain editable by any admin (D-B010). The exact UI scope is being confirmed with the owner (see PRODUCT_STATE).

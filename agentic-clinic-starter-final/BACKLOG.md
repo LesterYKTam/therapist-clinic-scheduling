@@ -893,3 +893,15 @@ Status: DONE (2026-09-29). Served options now cover draft-added issue sessions. 
 Sprint: S7
 Dependencies: BUG-012
 Discovery class: ADJACENT
+
+### US-017
+Type: STORY
+Title: Read-only view of every pod for all admins (D-B020)
+Description: Any signed-in admin can switch to view another pod's calendar, conflicts, historical alerts, leave, draft, notifications, people and reports, clearly marked read-only. Nothing about other pods is hidden or redacted. All data changes remain limited to the admin's currently assigned pod; clinic-wide rooms and config stay editable by any admin.
+Source / reason: Owner decision D-B020 (option b), 2026-09-29
+Acceptance criteria: A "View pod" control lists all pods and defaults to the admin's assigned pod. The server serves any pod's view to a signed-in, assigned admin, with a read-only flag when it is not their pod. Other pods' real names and ids appear, with redaction removed from views and error messages. Every mutation control is disabled while viewing another pod, and a visible read-only banner is shown. The server still rejects every write targeting a pod other than the assigned one (403). Staff reports and PDFs are readable for any pod. Demo mode keeps working. Tests cover reading another pod, the read-only flag, a rejected cross-pod write, unredacted names, and cross-pod reports. The build passes.
+Priority: P1
+Status: READY
+Sprint: S7
+Dependencies: D-B020
+Discovery class: ADJACENT
