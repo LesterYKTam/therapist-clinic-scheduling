@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
   try {
     if (podId) {
       const state = await clinic.read();
-      if (!state.therapists.some((person: { id: string; pod: string }) => person.id === staff && person.pod === podId)) return Response.json({ error: "Staff report is outside your assigned pod." }, { status: 403 });
+      if (!state.therapists.some((person: { id: string }) => person.id === staff)) return Response.json({ error: "Choose a valid staff member." }, { status: 404 });
     }
     return await reportPdfResponse(clinic, staff, month);
   } catch (caught) {

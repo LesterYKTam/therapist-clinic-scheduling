@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { initialState, draftIssues, workableAssignments } from '../lib/scheduling.mjs';
-import { podView, podTextRedactor } from '../lib/pod-view.mjs';
+import { podView } from '../lib/pod-view.mjs';
 
-test('pod read model hides another pod while preserving anonymous shared-room blockers', () => {
+test('D-B020: pod read model scopes lists to the viewed pod and shows other pod names in conflict reasons', () => {
   const state = initialState();
   const otherClient = state.clients.find((item) => item.pod === 'b');
   const otherTherapist = state.therapists.find((item) => item.pod === 'b');
@@ -20,28 +20,26 @@ test('pod read model hides another pod while preserving anonymous shared-room bl
   assert.equal(view.sessions.length, 1);
   assert.equal(Array.isArray(view.workableOptions['own-session']), true);
   const text = JSON.stringify(view);
-  assert.equal(text.includes(otherSession.id), false);
-  assert.equal(text.includes(otherClient.name), false);
-  assert.equal(text.includes(otherTherapist.name), false);
-  assert.match(view.draftIssues.a[0].reasons[0], /another pod’s booking/);
+  assert.equal(view.allPods.length, state.pods.length);
+  assert.equal(text.includes(otherClient.name), true); // only through the unredacted reason text
+  assert.equal(view.draftIssues.a[0].reasons[0], `Room overlaps session ${otherSession.id} for ${otherClient.name}.`);
+  assert.equal(view.sessions.some((item) => item.id === otherSession.id), false);
+  assert.equal(view.clients.some((item) => item.id === otherClient.id), false);
+  // Viewing pod b shows pod b's own people and bookings.
+  const other = podView(state, 'b');
+  assert.deepEqual(other.pods.map((item) => item.id), ['b']);
+  assert.equal(other.sessions.some((item) => item.id === otherSession.id), true);
+  assert.equal(other.clients.every((item) => item.pod === 'b'), true);
 });
 
-test('BUG-017: redaction masks whole foreign ids and names only, never own ids or text', () => {
+test('D-B020 replaces BUG-017: no redaction helper remains and reasons are passed through verbatim', async () => {
+  const module = await import('../lib/pod-view.mjs');
+  assert.equal('podTextRedactor' in module, false);
   const state = initialState();
   const own = state.clients.find((item) => item.pod === 'a');
-  own.name = 'Samantha Own'; own.id = 'a-c10';
-  state.clients.push({ id: 'a-c1', pod: 'b', name: 'Sam', active: true, assigned: ['b-t1', 'b-t2', 'b-t3'] });
-  state.sessions.push({ id: 's1', client: 'a-c1', therapist: 'b-t1', date: '2030-01-07', time: '09:00', minutes: 60, location: 'clinic', room: 'room-1' });
-  state.sessions.push({ id: 's10', client: 'a-c10', therapist: 'a-t1', date: '2030-01-08', time: '09:00', minutes: 60, location: 'clinic', room: 'room-1' });
-  const hide = podTextRedactor(state, 'a');
-  const mask = 'another pod’s booking';
-  assert.equal(hide('Overlaps s1.'), `Overlaps ${mask}.`);
-  assert.equal(hide('Overlaps s10.'), 'Overlaps s10.');
-  assert.equal(hide('s1 and s10 and s1-x and xs1'), `${mask} and s10 and s1-x and xs1`);
-  assert.equal(hide('Sam with Samantha Own'), `${mask} with Samantha Own`);
-  assert.equal(hide('Sam, Sam Sample'), `${mask}, ${mask}`);
-  assert.equal(hide('a-c10 a-c1'), `a-c10 ${mask}`);
-  assert.equal(hide('nothing here'), 'nothing here');
+  const foreign = state.clients.find((item) => item.pod === 'b');
+  state.draftIssues = { a: [{ sessionId: 'x', session: null, reasons: [`Clash with ${foreign.name} (${foreign.id}) and ${own.name}.`] }] };
+  assert.equal(podView(state, 'a').draftIssues.a[0].reasons[0], `Clash with ${foreign.name} (${foreign.id}) and ${own.name}.`);
 });
 
 test('BUG-018: served options cover draft-added sessions and match a full-state computation', () => {

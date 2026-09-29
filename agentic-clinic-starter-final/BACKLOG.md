@@ -901,7 +901,7 @@ Description: Any signed-in admin can switch to view another pod's calendar, conf
 Source / reason: Owner decision D-B020 (option b), 2026-09-29
 Acceptance criteria: A "View pod" control lists all pods and defaults to the admin's assigned pod. The server serves any pod's view to a signed-in, assigned admin, with a read-only flag when it is not their pod. Other pods' real names and ids appear, with redaction removed from views and error messages. Every mutation control is disabled while viewing another pod, and a visible read-only banner is shown. The server still rejects every write targeting a pod other than the assigned one (403). Staff reports and PDFs are readable for any pod. Demo mode keeps working. Tests cover reading another pod, the read-only flag, a rejected cross-pod write, unredacted names, and cross-pod reports. The build passes.
 Priority: P1
-Status: READY
+Status: DONE (2026-09-29). 72/72 tests pass. QA ran a signed-in browser test on a TEST-backed server: other pods are read-only, 12 kinds of cross-pod write are rejected with 403, and other pods' reports open. The PM hid the draft hint in read-only view.
 Sprint: S7
 Dependencies: D-B020
 Discovery class: ADJACENT

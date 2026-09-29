@@ -1,6 +1,5 @@
 /**
- * An intentional business-rule or authorization violation. Its message is written for users and is safe to show
- * (after pod redaction). Anything that is not a ClinicRuleError (database errors, TypeErrors, bugs) stays internal.
+ * An intentional business-rule or authorization violation. Its message is written for users and is safe to show. Anything that is not a ClinicRuleError (database errors, TypeErrors, bugs) stays internal.
  */
 export class ClinicRuleError extends Error {
   constructor(message) { super(message); this.name = 'ClinicRuleError'; }

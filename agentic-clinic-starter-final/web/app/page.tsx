@@ -26,7 +26,7 @@ export default async function Home() {
       const state = await clinic.read();
       const podId = session.user.podId;
       if (!podId || !state.pods.some((pod: { id: string }) => pod.id === podId)) return <main><h1>Pod assignment required</h1><p>An admin must assign your pod before you can access scheduling.</p><a href="/config/admins">Open admin configuration</a></main>;
-      return <ClinicClient initial={podView(withConflicts(state), podId)} authenticated />;
+      return <ClinicClient initial={{ ...podView(withConflicts(state), podId), viewPod: podId, assignedPod: podId, readOnly: false }} authenticated />;
     } finally { await clinic.close(); }
   }
   const clinic = new PostgresClinicStore();

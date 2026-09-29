@@ -8,7 +8,7 @@ import { GET as GET_PDF } from '../app/api/clinic/report/route.ts';
 
 after(async () => { await authPool.end(); });
 
-test('authenticated clinic reads require assignment and expose only that pod', async () => {
+test('authenticated clinic reads require assignment and default to the assigned pod', async () => {
   const previousMode = process.env.CLINIC_DEMO_MODE;
   process.env.CLINIC_DEMO_MODE = '0';
   const email = `synthetic-route-${randomBytes(12).toString('hex')}@example.invalid`;
@@ -47,8 +47,23 @@ test('authenticated clinic reads require assignment and expose only that pod', a
     assert.equal(secondView.clients.every((client) => client.pod === 'b'), true);
     assert.deepEqual(secondView.rooms, body.rooms);
     assert.equal((await POST(post(secondCookie, { action: 'begin-draft', pod: 'a', revision: secondView.revision }))).status, 403);
-    assert.equal((await GET(request(cookie, '?reportStaff=b-t1&month=2026-09'))).status, 403);
-    assert.equal((await GET_PDF(pdf(cookie, 'b-t1'))).status, 403);
+    // D-B020: reports for staff in any pod are readable.
+    assert.equal((await GET(request(cookie, '?reportStaff=b-t1&month=2026-09'))).status, 200);
+    assert.equal((await GET_PDF(pdf(cookie, 'b-t1'))).status, 200);
+    assert.equal((await GET(request(cookie, '?reportStaff=nobody&month=2026-09'))).status, 404);
+    // D-B020: another pod is readable read-only with real names; own pod is not read-only; unknown pod is 400.
+    assert.equal(body.readOnly, false); assert.equal(body.viewPod, 'a'); assert.equal(body.assignedPod, 'a');
+    const viewB = await (await GET(request(cookie, '?viewPod=b'))).json();
+    assert.deepEqual(viewB.pods.map((pod) => pod.id), ['b']);
+    assert.equal(viewB.viewPod, 'b'); assert.equal(viewB.assignedPod, 'a'); assert.equal(viewB.readOnly, true);
+    assert.equal(viewB.clients.length > 0 && viewB.clients.every((client) => client.pod === 'b'), true);
+    assert.equal(viewB.therapists.some((therapist) => therapist.name === 'Morgan Cedar'), true);
+    assert.equal((await (await GET(request(cookie, '?viewPod=a'))).json()).readOnly, false);
+    assert.equal((await GET(request(cookie, '?viewPod=zzz'))).status, 400);
+    // Writes stay limited to the assigned pod even for a pod the admin can read.
+    assert.equal((await POST(post(cookie, { action: 'begin-draft', pod: 'b', revision: viewB.revision }))).status, 403);
+    assert.equal((await POST(post(cookie, { action: 'record-leave', leave: { therapist: 'b-t1' }, revision: viewB.revision }))).status, 403);
+    assert.equal((await POST(post(cookie, { action: 'setup', setup: viewB, revision: viewB.revision }))).status, 403);
     const denied = [
       { action: 'begin-draft', pod: 'b', revision: body.revision },
       { action: 'record-leave', leave: { therapist: 'b-t1' }, revision: body.revision },

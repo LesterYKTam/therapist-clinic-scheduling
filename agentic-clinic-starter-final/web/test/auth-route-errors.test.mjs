@@ -12,7 +12,7 @@ after(async () => { await authPool.end(); });
 const oneOff = (more = {}) => ({ kind: 'one-off', client: 'a-c1', therapist: 'a-t1', date: '2030-01-07', time: '09:00', minutes: 60, location: 'clinic', room: 'room-1', ...more });
 const GENERIC = 'Unable to complete this clinic action. Refresh and try again.';
 
-test('authenticated action errors: rule messages reach the admin, other pods are redacted, internal errors stay generic', async () => {
+test('authenticated action errors: rule messages reach the admin, other pod real names show (D-B020), internal errors stay generic', async () => {
   const previousMode = process.env.CLINIC_DEMO_MODE;
   process.env.CLINIC_DEMO_MODE = '0';
   const url = process.env.DATABASE_URL;
@@ -61,8 +61,8 @@ test('authenticated action errors: rule messages reach the admin, other pods are
     res = await post({ action: 'commit', ...oneOff({ room: 'room-2', time: '11:00' }), revision: await revision() });
     assert.equal(res.status, 400);
     message = (await res.json()).error;
-    assert.match(message, /another pod/);
-    for (const secret of [foreignId, 'b-c1', 'b-t1', 'Sam Sample', 'Morgan Cedar']) assert.equal(message.includes(secret), false, `${secret} leaked in: ${message}`);
+    assert.notEqual(message, GENERIC);
+    assert.equal(message.includes(foreignId), true, message); // D-B020: nothing about other pods is hidden
 
     // Authorization: cross-pod action is a static 403 message.
     res = await post({ action: 'begin-draft', pod: 'b', revision: await revision() });

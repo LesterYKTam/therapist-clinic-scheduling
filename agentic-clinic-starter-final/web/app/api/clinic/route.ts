@@ -12,8 +12,6 @@ import { authorizeClinicAction, mergePodSetup } from "../../../lib/clinic-access
 import { demoModeGate } from "../../../lib/demo-mode.mjs";
 // @ts-expect-error Rule-error classification is exercised by the Node suite.
 import { isClinicRuleError } from "../../../lib/clinic-error.mjs";
-// @ts-expect-error The pure pod projection is covered by the Node suite.
-import { podTextRedactor } from "../../../lib/pod-view.mjs";
 
 export const dynamic = "force-dynamic";
 
@@ -22,26 +20,15 @@ function response(body: unknown, status = 200) { return Response.json(body, { st
 function error(error: unknown) { return response({ error: error instanceof Error ? error.message : "Unexpected scheduling error." }, 400); }
 const GENERIC_ACTION_ERROR = "Unable to complete this clinic action. Refresh and try again.";
 /**
- * Intentional rule violations (ClinicRuleError) reach the user, with other pods' names and ids redacted for pod admins.
+ * Intentional rule violations (ClinicRuleError) reach the user as written (D-B020: no pod data is hidden from admins).
  * Everything else (database errors, TypeErrors, bugs) is logged server-side and stays generic.
  */
-async function actionFailure(caught: unknown, podId: string | null, clinic: InstanceType<typeof PostgresClinicStore> | undefined) {
+function actionFailure(caught: unknown) {
   if (!isClinicRuleError(caught)) {
     console.error("Clinic action failed", caught);
     return response({ error: GENERIC_ACTION_ERROR }, 500);
   }
-  let message = (caught as Error).message;
-  if (podId) {
-    try {
-      if (!clinic) throw new Error("no store");
-      message = podTextRedactor(await clinic.read(), podId)(message);
-    } catch (redactionFailure) {
-      // Without the committed state we cannot prove the message is free of other pods' data.
-      console.error("Could not redact clinic action error", redactionFailure);
-      return response({ error: GENERIC_ACTION_ERROR }, 500);
-    }
-  }
-  return response({ error: message }, 400);
+  return response({ error: (caught as Error).message }, 400);
 }
 function requestFrom(body: any) {
   const allowed = ["kind", "client", "therapist", "date", "startDate", "endDate", "time", "minutes", "location", "room", "occurrenceId"];
@@ -63,10 +50,13 @@ export async function GET(request: NextRequest) {
       const reportStaff = request.nextUrl.searchParams.get("reportStaff");
       const month = request.nextUrl.searchParams.get("month");
       if (reportStaff && month) {
-        if (!state.therapists.some((staff: { id: string; pod: string }) => staff.id === reportStaff && staff.pod === podId)) return response({ error: "Staff report is outside your pod." }, 403);
+        if (!state.therapists.some((staff: { id: string }) => staff.id === reportStaff)) return response({ error: "Choose a valid staff member." }, 404);
         return response(await clinic.report(reportStaff, month));
       }
-      return response(podView(withConflicts(state), podId));
+      // D-B020: any admin with an assignment may read any pod; it is read-only unless it is their own.
+      const viewPod = request.nextUrl.searchParams.get("viewPod") || podId;
+      if (!state.pods.some((pod: { id: string }) => pod.id === viewPod)) return response({ error: "Choose a valid pod." }, 400);
+      return response({ ...podView(withConflicts(state), viewPod), viewPod, assignedPod: podId, readOnly: viewPod !== podId });
     }
     const reportStaff = request.nextUrl.searchParams.get("reportStaff");
     const month = request.nextUrl.searchParams.get("month");
@@ -99,7 +89,7 @@ export async function POST(request: NextRequest) {
         if (body.action === "setup") setupChange = mergePodSetup(current, podId, body.setup);
       }
       catch (caught) {
-        if (!isClinicRuleError(caught)) return await actionFailure(caught, podId, clinic);
+        if (!isClinicRuleError(caught)) return actionFailure(caught);
         // Authorization and Setup-scope messages are static text with no clinic data.
         return response({ error: (caught as Error).message || "This action is outside your assigned pod." }, 403);
       }
@@ -107,7 +97,7 @@ export async function POST(request: NextRequest) {
     // No caller-supplied role, person id, pod identity, or state snapshot is authority.
     const actionResponse = async (pending: Promise<any>) => {
       const value = await pending;
-      return response(podId ? { state: podView(withConflicts(value.state), podId) } : value);
+      return response(podId ? { state: { ...podView(withConflicts(value.state), podId), viewPod: podId, assignedPod: podId, readOnly: false } } : value);
     };
     if (body.action === "preview") return response(await clinic.preview(requestFrom(body)));
     if (body.action === "commit") return await actionResponse(clinic.commit(requestFrom(body), Number(body.revision)));
@@ -126,6 +116,6 @@ export async function POST(request: NextRequest) {
     if (body.action === "commit-draft") return await actionResponse(clinic.commitDraft(String(body.pod || ""), Number(body.revision)));
     if (body.action === "handle-notification") return await actionResponse(clinic.handleNotification(String(body.pod || ""), String(body.taskId || ""), Number(body.revision)));
     return response({ error: "Unknown action." }, 400);
-  } catch (caught) { return demo ? error(caught) : await actionFailure(caught, podId, clinic); }
+  } catch (caught) { return demo ? error(caught) : actionFailure(caught); }
   finally { await clinic?.close(); }
 }
