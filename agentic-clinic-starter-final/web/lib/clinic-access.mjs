@@ -48,11 +48,12 @@ export function authorizeClinicAction(state, assignedPod, body) {
   const podActions = new Set([
     'amend-leave', 'withdraw-leave', 'begin-draft', 'discard-draft',
     'preview-auto-resolve', 'apply-auto-resolve', 'discard-auto-resolve',
-    'stage-draft', 'stage-draft-add', 'commit-draft', 'handle-notification',
+    'stage-draft', 'stage-draft-add', 'remove-draft-change', 'commit-draft', 'handle-notification',
   ]);
   if (!podActions.has(action)) throw new Error('Unknown clinic action.');
   if (body.pod !== assignedPod) throw new Error('This action is outside your assigned pod.');
   if (action === 'stage-draft-add' && podForClient(state, body.client) !== assignedPod) throw new Error('This client is outside your assigned pod.');
+  if (action === 'remove-draft-change' && !state.drafts.find((draft) => draft.pod === assignedPod)?.changes.some((item) => item.sessionId === body.sessionId)) throw new Error('This staged change is outside your assigned pod.');
   if (action === 'stage-draft') {
     const id = body.change?.sessionId;
     const committed = state.sessions.find((item) => item.id === id);

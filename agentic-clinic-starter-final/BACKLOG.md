@@ -739,7 +739,7 @@ Description: Started sessions overlapping recorded leave stay visible as histori
 Source / reason: D-B012 (Q-017)
 Acceptance criteria: A historical overlap is shown as a distinct alert and does not count toward the blocking conflict total. Draft commit and direct commit succeed while only historical alerts remain. The booking and the leave record are unchanged. Future leave conflicts still block commit. Regression tests cover both the draft and the direct path.
 Priority: P0
-Status: READY
+Status: DONE (2026-09-29). 47/47 tests and the build pass. QA code review and a DEV browser check passed: the Sep 23 conflict shows as a historical alert and the badge shows no conflicts.
 Sprint: S7
 Dependencies: BUG-012
 Discovery class: BLOCKING
@@ -763,7 +763,7 @@ Description: Once a staged session's start time passes, commit tells the admin t
 Source / reason: Discovery scenario (b), confirmed by the PM at clinic-store.mjs stageDraftChange and commitDraft
 Acceptance criteria: The admin can remove or revert any single staged change, including one whose session has started. After that, commit succeeds if no other issue remains. Other staged changes are preserved. Covered by a regression test.
 Priority: P0
-Status: READY
+Status: DONE (2026-09-29). The Remove change action has pod checks. QA verified it in the browser, and the other staged changes and committed data are untouched.
 Sprint: S7
 Dependencies: BUG-012
 Discovery class: BLOCKING

@@ -82,6 +82,7 @@ export async function POST(request: NextRequest) {
     if (body.action === "discard-auto-resolve") return await actionResponse(clinic.discardAutoResolve(String(body.pod || ""), Number(body.revision)));
     if (body.action === "stage-draft") return await actionResponse(clinic.stageDraftChange(String(body.pod || ""), body.change || {}, Number(body.revision)));
     if (body.action === "stage-draft-add") return await actionResponse(clinic.stageDraftAdd(String(body.pod || ""), requestFrom(body), Number(body.revision)));
+    if (body.action === "remove-draft-change") return await actionResponse(clinic.removeDraftChange(String(body.pod || ""), String(body.sessionId || ""), Number(body.revision)));
     if (body.action === "commit-draft") return await actionResponse(clinic.commitDraft(String(body.pod || ""), Number(body.revision)));
     if (body.action === "handle-notification") return await actionResponse(clinic.handleNotification(String(body.pod || ""), String(body.taskId || ""), Number(body.revision)));
     return response({ error: "Unknown action." }, 400);

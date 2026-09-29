@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import pg from 'pg';
 import { PostgresClinicStore } from '../lib/clinic-store.mjs';
-import { initialState, leaveConflicts, draftIssues, workableAssignments, directResolutionProposal, boundedResolutionProposal } from '../lib/scheduling.mjs';
+import { initialState, leaveConflicts, withConflicts, draftIssues, workableAssignments, directResolutionProposal, boundedResolutionProposal } from '../lib/scheduling.mjs';
 import { reportPdfResponse } from '../lib/report-response.mjs';
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
 
@@ -579,8 +579,10 @@ test('automatic and direct alternatives never rewrite a session that has already
   assert.deepEqual(workableAssignments(state,'a','old-visit'),[]);
   const proposal=boundedResolutionProposal(state,'a');
   assert.equal(proposal.proposed.length,0);
-  assert.equal(proposal.unresolved.length,1);
-  assert.match(proposal.stops[0].reason,/already started/);
+  // D-B012: the started session's leave overlap is a historical alert, not an unresolved blocking issue.
+  assert.equal(proposal.unresolved.length,0);
+  assert.equal(proposal.stops.length,0);
+  assert.equal(draftIssues(state,'a').length,0);
 });
 test('weekly-cap cascade never moves a session that started earlier in the week', () => {
   const state=initialState();
@@ -616,6 +618,105 @@ test('a shared draft cannot commit after its target session has started', async 
     assert.equal(after.revision,before.revision);
     assert.equal(after.sessions[0].therapist,'a-t1');
     assert.equal(after.drafts.length,1);
+  } finally { await store.close(); }
+});
+const historicalSeed=()=>{
+  const seed=initialState();
+  seed.sessions.push({id:'old-visit',client:'a-c1',therapist:'a-t1',date:'2020-01-06',time:'09:00',minutes:60,location:'clinic',room:'room-1'});
+  seed.leaves.push({id:'old-leave',pod:'a',therapist:'a-t1',startDate:'2020-01-06',startTime:'09:00',endDate:'2020-01-06',endTime:'10:00'});
+  return seed;
+};
+test('CHANGE-001: historical leave alerts stay visible but do not block direct or draft commits', async () => {
+  await clean(); const seed=historicalSeed();
+  seed.sessions.push({id:'future-visit',client:'a-c1',therapist:'a-t1',date:'2030-01-07',time:'09:00',minutes:60,location:'clinic',room:'room-1'});
+  const store=await open(seed);
+  try {
+    let state=await store.read();
+    const oldBooking=JSON.stringify(state.sessions.find((item)=>item.id==='old-visit'));
+    const leaves=JSON.stringify(state.leaves);
+    const view=withConflicts(state);
+    assert.equal(view.conflicts.length,0);
+    assert.equal(view.historicalAlerts.length,1);
+    assert.equal(view.historicalAlerts[0].sessionId,'old-visit');
+    assert.equal(draftIssues(state,'a').length,0);
+    await store.preview(oneOff({date:'2030-01-08'}));
+    await store.commit(oneOff({date:'2030-01-08'}),state.revision);
+    state=await store.read();
+    assert.equal(state.sessions.length,3);
+    await store.stageDraftChange('a',{kind:'cancel',sessionId:'future-visit'},state.revision);
+    state=await store.read();
+    await store.commitDraft('a',state.revision);
+    state=await store.read();
+    assert.equal(state.sessions.length,2);
+    assert.equal(JSON.stringify(state.sessions.find((item)=>item.id==='old-visit')),oldBooking);
+    assert.equal(JSON.stringify(state.leaves),leaves);
+    assert.equal(withConflicts(state).historicalAlerts.length,1);
+  } finally { await store.close(); }
+});
+test('CHANGE-001: a future leave conflict still blocks even beside a historical alert', async () => {
+  await clean(); const seed=historicalSeed();
+  seed.sessions.push({id:'future-visit',client:'a-c1',therapist:'a-t1',date:'2030-01-07',time:'09:00',minutes:60,location:'clinic',room:'room-1'});
+  seed.leaves.push({id:'future-leave',pod:'a',therapist:'a-t1',startDate:'2030-01-07',startTime:'09:00',endDate:'2030-01-07',endTime:'10:00'});
+  const store=await open(seed);
+  try {
+    let state=await store.read();
+    const view=withConflicts(state);
+    assert.deepEqual(view.conflicts.map((item)=>item.sessionId),['future-visit']);
+    assert.deepEqual(view.historicalAlerts.map((item)=>item.sessionId),['old-visit']);
+    await assert.rejects(()=>store.commit(oneOff({date:'2030-01-08'}),state.revision),/Outstanding schedule conflicts/);
+    await store.stageDraftChange('a',{kind:'assign',sessionId:'future-visit',therapist:'a-t2'},state.revision);
+    state=await store.read();
+    await store.stageDraftChange('a',{kind:'assign',sessionId:'future-visit',therapist:'a-t1'},state.revision);
+    state=await store.read();
+    await store.stageDraftChange('a',{kind:'reschedule',sessionId:'future-visit',therapist:'a-t1',date:'2030-01-07',time:'09:30',minutes:60,location:'clinic',room:'room-1'},state.revision);
+    state=await store.read();
+    assert.match(draftIssues(state,'a')[0].reasons.join(' '),/Therapist leave/);
+    await assert.rejects(()=>store.commitDraft('a',state.revision),/outstanding schedule conflict/);
+  } finally { await store.close(); }
+});
+test('BUG-013: a staged change whose session has started can be removed, keeping other changes, then commit succeeds', async () => {
+  await clean(); const seed=initialState();
+  seed.sessions.push(
+    {id:'first-visit',client:'a-c1',therapist:'a-t1',date:'2030-01-07',time:'09:00',minutes:60,location:'clinic',room:'room-1'},
+    {id:'second-visit',client:'a-c1',therapist:'a-t1',date:'2030-01-14',time:'09:00',minutes:60,location:'clinic',room:'room-1'});
+  const store=await open(seed);
+  const actualNow=Date.now;
+  try {
+    let state=await store.read();
+    await store.stageDraftChange('a',{kind:'assign',sessionId:'first-visit',therapist:'a-t2'},state.revision);
+    state=await store.read();
+    await store.stageDraftChange('a',{kind:'assign',sessionId:'second-visit',therapist:'a-t2'},state.revision);
+    state=await store.read();
+    Date.now=()=>Date.parse('2030-01-08T15:00:00Z'); // first-visit has now started
+    await assert.rejects(()=>store.commitDraft('a',state.revision),/already started/);
+    await store.previewAutoResolve('a',state.revision); // a pending proposal must go stale when the draft changes
+    state=await store.read();
+    const removed=await store.removeDraftChange('a','first-visit',state.revision);
+    assert.deepEqual(removed.result.changes.map((item)=>item.sessionId),['second-visit']);
+    state=await store.read();
+    assert.deepEqual(state.drafts[0].changes.map((item)=>item.sessionId),['second-visit']);
+    assert.equal(state.sessions.find((item)=>item.id==='first-visit').therapist,'a-t1');
+    await assert.rejects(()=>store.applyAutoResolve('a',state.revision),/stale/);
+    await store.discardAutoResolve('a',state.revision);
+    state=await store.read();
+    await assert.rejects(()=>store.removeDraftChange('a','first-visit',state.revision),/no longer in the draft/);
+    await store.commitDraft('a',state.revision);
+    state=await store.read();
+    assert.equal(state.sessions.find((item)=>item.id==='first-visit').therapist,'a-t1');
+    assert.equal(state.sessions.find((item)=>item.id==='second-visit').therapist,'a-t2');
+    assert.equal(state.drafts.length,0);
+  } finally { Date.now=actualNow; await store.close(); }
+});
+test('BUG-013: removing a staged change cannot touch another pod’s draft', async () => {
+  await clean(); const seed=initialState();
+  seed.sessions.push({id:'b-visit',client:'b-c1',therapist:'b-t1',date:'2030-01-07',time:'09:00',minutes:60,location:'clinic',room:'room-2'});
+  const store=await open(seed);
+  try {
+    let state=await store.read();
+    await store.stageDraftChange('b',{kind:'assign',sessionId:'b-visit',therapist:'b-t2'},state.revision);
+    state=await store.read();
+    await assert.rejects(()=>store.removeDraftChange('a','b-visit',state.revision),/no longer in the draft/);
+    assert.deepEqual((await store.read()).drafts.find((item)=>item.pod==='b').changes.map((item)=>item.sessionId),['b-visit']);
   } finally { await store.close(); }
 });
 test('room, Home duration, recurrence conflict, and lifecycle guard are durable constraints', async () => {

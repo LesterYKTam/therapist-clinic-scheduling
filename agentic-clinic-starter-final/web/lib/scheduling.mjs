@@ -81,12 +81,17 @@ export function leaveConflicts(data) {
     if (!list) { list = leaves.filter((leave) => leave.therapist === therapist).map((leave) => ({ leave, span: leaveInterval(leave, data.config) })); byTherapist.set(therapist, list); }
     return list;
   };
+  const now = Date.now();
   return data.sessions.flatMap((session) => {
     const [start, end] = interval(session, data.config);
     const causes = forTherapist(session.therapist).filter(({ span }) => start < span[1] && span[0] < end).map(({ leave }) => leave);
-    return causes.length ? [{ sessionId: session.id, session, leaveIds: causes.map((leave) => leave.id), leaves: causes }] : [];
+    return causes.length ? [{ sessionId: session.id, session, leaveIds: causes.map((leave) => leave.id), leaves: causes, historical: start < now }] : [];
   });
 }
+/** D-B012: only conflicts on sessions that have not started block commits. */
+export const blockingLeaveConflicts = (data) => leaveConflicts(data).filter((item) => !item.historical);
+/** D-B012: started sessions overlapping recorded leave stay visible but never block. */
+export const historicalLeaveAlerts = (data) => leaveConflicts(data).filter((item) => item.historical);
 
 /** Committed sessions with the pod's draft applied. Shares unchanged records with `data`; only touched sessions are copied. */
 export function draftCandidate(data, pod) {
@@ -132,6 +137,7 @@ const shapeLookups = (data) => {
 class DraftEngine {
   constructor(data, pod) {
     const { candidate, stale } = draftCandidate(data, pod);
+    this.now = Date.now(); // a session that started before this is historical: its leave overlap is an alert, not an issue
     this.pod = pod; this.candidate = candidate; this.config = candidate.config;
     this.lookups = shapeLookups(candidate);
     this.clients = byIdMap(candidate.clients); this.therapists = byIdMap(candidate.therapists);
@@ -200,7 +206,7 @@ class DraftEngine {
   reasonsOf(entry) {
     const s = entry.s, reasons = [];
     const add = (reason) => { if (!reasons.includes(reason)) reasons.push(reason); };
-    const causes = this.leaveSpans(s.therapist).filter(({ span }) => entry.start < span[1] && span[0] < entry.end).map(({ leave }) => leave);
+    const causes = entry.start < this.now ? [] : this.leaveSpans(s.therapist).filter(({ span }) => entry.start < span[1] && span[0] < entry.end).map(({ leave }) => leave);
     if (causes.length) add(`Therapist leave: ${causes.map((leave) => `${leave.startDate} ${leave.startTime}–${leave.endDate} ${leave.endTime}`).join('; ')}`);
     const neighbours = this.neighbours(entry);
     const pair = ({ other, therapist, client, room }) => {
@@ -420,7 +426,7 @@ export function boundedResolutionProposal(data,pod) {
   return {mode:'bounded',baseRevision:data.revision,cascadeDepth:maxDepth,proposed,unresolved:engine.issues(),stops,allDraftChanges:structuredClone(changes)};
 }
 
-export function withConflicts(data) { return { ...data, conflicts: leaveConflicts(data), draftIssues: Object.fromEntries((data.drafts||[]).map((draft)=>[draft.pod,draftIssues(data,draft.pod)])) }; }
+export function withConflicts(data) { return { ...data, conflicts: blockingLeaveConflicts(data), historicalAlerts: historicalLeaveAlerts(data), draftIssues: Object.fromEntries((data.drafts||[]).map((draft)=>[draft.pod,draftIssues(data,draft.pod)])) }; }
 export function overlaps(a, b, config) { const [as, ae] = interval(a, config); const [bs, be] = interval(b, config); return as < be && bs < ae; }
 export function weekday(date) { const day = new Date(parseDate(date)).getUTCDay(); return day || 7; }
 export function weekKey(date, weekStart = 1) {

@@ -1,7 +1,7 @@
 import pg from 'pg';
 import {
   initialState, validateState, blockersForSetup, createOccurrences,
-  todayInZone, addDays, datesWeekly, localInstant, leaveInterval, leaveConflicts, draftCandidate, draftIssues, boundedResolutionProposal
+  todayInZone, addDays, datesWeekly, localInstant, leaveInterval, blockingLeaveConflicts, draftCandidate, draftIssues, boundedResolutionProposal
 } from './scheduling.mjs';
 
 const clone = (value) => structuredClone(value);
@@ -106,7 +106,7 @@ export class PostgresClinicStore {
 
   requireNoOutstandingConflicts(state,request) {
     const pod=this.requestPod(state,request);
-    if (leaveConflicts(state).some((issue)=>state.clients.find((item)=>item.id===issue.session.client)?.pod===pod)) throw new Error('Outstanding schedule conflicts must be resolved together before committing schedule changes.');
+    if (blockingLeaveConflicts(state).some((issue)=>state.clients.find((item)=>item.id===issue.session.client)?.pod===pod)) throw new Error('Outstanding schedule conflicts must be resolved together before committing schedule changes.');
   }
 
   requireNoDraftForRequest(state,request) {
@@ -132,7 +132,7 @@ export class PostgresClinicStore {
   }
 
   rejectNewLeaveConflicts(state, before) {
-    const affected = leaveConflicts(state).filter(({ session }) => before.get(session.id) !== JSON.stringify(session));
+    const affected = blockingLeaveConflicts(state).filter(({ session }) => before.get(session.id) !== JSON.stringify(session));
     if (affected.length) throw new Error('The proposed session overlaps recorded therapist leave. Resolve the leave conflict first.');
   }
 
@@ -316,6 +316,18 @@ export class PostgresClinicStore {
         } else draft.changes.push(next);
       }
       return { draftId: draft.id, changes: clone(draft.changes) };
+    });
+  }
+
+  /** Revert one staged change (even for a session that has since started). Other staged changes are kept; a pending proposal goes stale via the revision bump. */
+  async removeDraftChange(pod, sessionId, revision) {
+    return this.transaction(revision, (state) => {
+      if (!state.pods.some((item) => item.id === pod)) throw new Error('Choose a valid pod.');
+      const draft = state.drafts.find((item) => item.pod === pod);
+      const index = draft ? draft.changes.findIndex((item) => item.sessionId === sessionId) : -1;
+      if (index < 0) throw new Error('This staged change is no longer in the draft.');
+      const [removed] = draft.changes.splice(index, 1);
+      return { draftId: draft.id, removed: clone(removed), changes: clone(draft.changes) };
     });
   }
 

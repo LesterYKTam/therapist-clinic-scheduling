@@ -18,3 +18,5 @@
 :root .event.draft-event{background:#fff3da;border:2px dashed #b88832}
 :root .event.draft-event::after{content:'Uncommitted draft';font-size:11px;font-weight:700;color:#775510}
 @media (min-width:901px) and (max-width:1200px){.workspace{grid-template-columns:180px 1fr}.content{padding:24px}.calendar-body{grid-template-columns:minmax(0,1fr) 270px}.week-grid{grid-template-columns:repeat(7,minmax(125px,1fr))}}
+
+.workspace .conflict-panel .historical-alerts{margin-top:16px;padding-top:12px;border-top:1px dashed #b8c6cf}.conflict-panel .historical-alerts h3{font-size:15px;margin:0;color:#4a5f6c}.conflict-panel .historical-alerts li{border-color:#cfd9df;border-left-color:#8497a3;background:#f4f7f9}.conflict-panel .historical-alerts li strong{color:#3d5260}

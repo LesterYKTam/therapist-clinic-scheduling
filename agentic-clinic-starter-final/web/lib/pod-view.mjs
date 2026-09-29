@@ -46,6 +46,7 @@ export function podView(state, podId) {
     drafts: redact(structuredClone(state.drafts.filter((item) => item.pod === podId))),
     notifications: structuredClone(state.notifications.filter((item) => item.pod === podId)),
     conflicts: structuredClone((state.conflicts || []).filter((item) => clientIds.has(item.session.client))),
+    historicalAlerts: structuredClone((state.historicalAlerts || []).filter((item) => clientIds.has(item.session.client))),
     draftIssues: { [podId]: redact(structuredClone(state.draftIssues?.[podId] || [])) },
     // Workable options only serve issue resolution, so compute them for issue sessions; the client derives any other on demand.
     workableOptions: workableAssignmentsFor(state, podId, sessions.filter((session) => issueSessionIds.has(session.id)).map((session) => session.id)),

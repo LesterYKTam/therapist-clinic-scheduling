@@ -15,6 +15,7 @@ const state = {
 test('clinic action authorization follows assigned pod rather than supplied pod', () => {
   assert.doesNotThrow(() => authorizeClinicAction(state, 'a', { action: 'record-leave', leave: { therapist: 'a-t' } }));
   assert.doesNotThrow(() => authorizeClinicAction(state, 'a', { action: 'stage-draft', pod: 'a', change: { sessionId: 'a-new' } }));
+  assert.doesNotThrow(() => authorizeClinicAction(state, 'a', { action: 'remove-draft-change', pod: 'a', sessionId: 'a-new' }));
   for (const action of [
     { action: 'record-leave', leave: { therapist: 'b-t' } },
     { action: 'commit', kind: 'edit-occurrence', occurrenceId: 'b-s', client: 'a-c' },
@@ -22,6 +23,8 @@ test('clinic action authorization follows assigned pod rather than supplied pod'
     { action: 'stage-draft', pod: 'a', change: { sessionId: 'b-s' } },
     { action: 'stage-draft-add', pod: 'a', client: 'b-c' },
     { action: 'begin-draft', pod: 'b' },
+    { action: 'remove-draft-change', pod: 'b', sessionId: 'a-new' },
+    { action: 'remove-draft-change', pod: 'a', sessionId: 'b-s' },
   ]) assert.throws(() => authorizeClinicAction(state, 'a', action));
   assert.throws(() => authorizeClinicAction(state, null, { action: 'begin-draft', pod: 'a' }));
 });
