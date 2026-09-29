@@ -14,10 +14,12 @@ export function podTextRedactor(state, podId) {
   // Longest token wins at each position; tokens are looked up by length so cost does not grow with the clinic's history.
   const tokenSet = new Set(foreignTokens);
   const tokenLengths = [...new Set(foreignTokens.map((token) => token.length))].sort((a, b) => b - a);
+  const idChar = /[A-Za-z0-9_-]/;
   return (text) => {
     let out = '', from = 0, at = 0;
     while (at < text.length) {
-      const length = tokenLengths.find((size) => at + size <= text.length && tokenSet.has(text.slice(at, at + size)));
+      // Whole tokens only: a match is never preceded or followed by an id character, so foreign "s1" leaves own "s10" alone.
+      const length = idChar.test(text[at - 1] || '') ? undefined : tokenLengths.find((size) => at + size <= text.length && !idChar.test(text[at + size] || '') && tokenSet.has(text.slice(at, at + size)));
       if (length === undefined) { at++; continue; }
       out += text.slice(from, at) + 'another pod’s booking'; at += length; from = at;
     }
@@ -32,6 +34,8 @@ export function podView(state, podId) {
   const clientIds = new Set(clients.map((item) => item.id));
   const sessions = state.sessions.filter((item) => clientIds.has(item.client));
   const issueSessionIds = new Set((state.draftIssues?.[podId] || []).map((item) => item.sessionId));
+  const draftAddedIds = (state.drafts || []).find((item) => item.pod === podId)?.changes.filter((item) => item.kind === 'add').map((item) => item.sessionId) || [];
+  const optionIds = [...sessions.map((session) => session.id), ...draftAddedIds].filter((id) => issueSessionIds.has(id));
   const hide = podTextRedactor(state, podId);
   const redact = (value) => {
     if (typeof value === 'string') return hide(value);
@@ -56,7 +60,7 @@ export function podView(state, podId) {
     historicalAlerts: structuredClone((state.historicalAlerts || []).filter((item) => clientIds.has(item.session.client))),
     proposalStale: { [podId]: !!state.proposalStale?.[podId] },
     draftIssues: { [podId]: redact(structuredClone(state.draftIssues?.[podId] || [])) },
-    // Workable options only serve issue resolution, so compute them for issue sessions; the client derives any other on demand.
-    workableOptions: workableAssignmentsFor(state, podId, sessions.filter((session) => issueSessionIds.has(session.id)).map((session) => session.id)),
+    // Workable options only serve issue resolution, so compute them for issue sessions (committed and draft-added); the client derives any other on demand.
+    workableOptions: workableAssignmentsFor(state, podId, optionIds),
   };
 }

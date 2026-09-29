@@ -847,7 +847,7 @@ Description: Add web tests for SPEC rule 1 (assigned therapists only), rule 6 (s
 Source / reason: Discovery R1, R6, R9, D2
 Acceptance criteria: Each rule has a web/test regression. All tests pass.
 Priority: P2
-Status: READY
+Status: DONE (2026-09-29). Five new rule tests; no production bug found. 68/68 pass.
 Sprint: S7
 Dependencies: none
 Discovery class: ADJACENT
@@ -877,7 +877,7 @@ Description: podView masks other pods' session ids and names inside text by subs
 Source / reason: Developer note during BUG-012
 Acceptance criteria: Redaction matches whole id and name tokens only. Own-pod text and ids are never altered. Foreign ids and names are still masked. Covered by a test that uses short, colliding ids.
 Priority: P3
-Status: READY
+Status: DONE (2026-09-29). Whole-token redaction. The PM confirmed the new test fails on the old code and passes on the new.
 Sprint: S7
 Dependencies: BUG-012
 Discovery class: TANGENTIAL
@@ -889,7 +889,7 @@ Description: podView builds workableOptions only from committed pod sessions. A 
 Source / reason: QA verification of BUG-012 (repro: pod a draft-adds a session in room-1 overlapping pod b's booking)
 Acceptance criteria: Served options cover every issue session in the pod's draft, including draft-added ones. Options for such a session match a full-state computation. Covered by a test.
 Priority: P2
-Status: READY
+Status: DONE (2026-09-29). Served options now cover draft-added issue sessions. The PM confirmed the new test fails on the old code and passes on the new.
 Sprint: S7
 Dependencies: BUG-012
 Discovery class: ADJACENT

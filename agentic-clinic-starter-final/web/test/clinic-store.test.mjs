@@ -987,3 +987,79 @@ test('US-016: the last alternative never cascades, even when the blocking sessio
     assert.equal(state.sessions.find((item)=>item.id==='movable').therapist,lastAlt);
   }
 });
+
+test('TASK-011 rule 1: sessions can only use the client’s assigned therapists, directly and in a draft', async () => {
+  await clean(); const seed=initialState(); seed.therapists.push({id:'a-t4',pod:'a',name:'Extra Therapist',capHours:20,active:true}); const store=await open(seed);
+  try {
+    let state=await store.read();
+    await assert.rejects(()=>store.preview(oneOff({therapist:'a-t4'})),/assigned therapists/);
+    await assert.rejects(()=>store.commit(oneOff({therapist:'a-t4'}),state.revision),/assigned therapists/);
+    await assert.rejects(()=>store.preview(oneOff({therapist:'b-t1'})),/assigned therapists/);
+    await store.commit(oneOff(),state.revision);
+    state=await store.read();
+    const id=state.sessions[0].id;
+    await assert.rejects(()=>store.stageDraftChange('a',{kind:'assign',sessionId:id,therapist:'a-t4'},state.revision),/ranked therapists/);
+    await assert.rejects(()=>store.stageDraftChange('a',{kind:'reschedule',sessionId:id,therapist:'a-t4',date:'2030-01-08',time:'09:00',minutes:60,location:'clinic',room:'room-1'},state.revision),/ranked therapists/);
+    await assert.rejects(()=>store.stageDraftAdd('a',oneOff({therapist:'a-t4',date:'2030-01-09'}),state.revision),/ranked therapists/);
+    state=await store.read();
+    assert.equal(state.drafts.length,0);
+    assert.equal(state.sessions.length,1);
+  } finally { await store.close(); }
+});
+test('TASK-011 rule 6: setup rejects a therapist from another pod in a client’s assigned three', async () => {
+  await clean(); const store=await open();
+  try {
+    const state=await store.read();
+    const setup=structuredClone(state); setup.clients.find((item)=>item.id==='a-c1').assigned=['a-t1','a-t2','b-t1'];
+    await assert.rejects(()=>store.updateSetup(setup,state.revision),/must belong to the client pod/);
+    const after=await store.read();
+    assert.equal(after.revision,state.revision);
+    assert.deepEqual(after.clients.find((item)=>item.id==='a-c1').assigned,['a-t1','a-t2','a-t3']);
+  } finally { await store.close(); }
+});
+test('TASK-011: a client cannot be double-booked, even with a different therapist and room', async () => {
+  await clean(); const store=await open();
+  try {
+    let state=await store.read();
+    await store.commit(oneOff(),state.revision);
+    state=await store.read();
+    await assert.rejects(()=>store.preview(oneOff({therapist:'a-t2',room:'room-2',time:'09:30'})),/Client overlap/);
+    await assert.rejects(()=>store.commit(oneOff({therapist:'a-t2',room:'room-2',time:'09:30'}),state.revision),/Client overlap/);
+    assert.equal((await store.read()).sessions.length,1);
+    await store.commit(oneOff({therapist:'a-t2',room:'room-2',time:'10:00'}),state.revision);
+    assert.equal((await store.read()).sessions.length,2);
+  } finally { await store.close(); }
+});
+test('TASK-011: bookings outside office hours or on a non-working day are rejected', async () => {
+  await clean(); const store=await open();
+  try {
+    const state=await store.read();
+    const outside=/outside configured working days or office hours/;
+    for (const bad of [oneOff({time:'08:00'}),oneOff({time:'16:30'}),oneOff({date:'2030-01-06'}),oneOff({date:'2030-01-12'})]) {
+      await assert.rejects(()=>store.preview(bad),outside);
+      await assert.rejects(()=>store.commit(bad,state.revision),outside);
+    }
+    await store.commit(oneOff({time:'16:00'}),state.revision);
+    assert.equal((await store.read()).sessions.length,1);
+  } finally { await store.close(); }
+});
+test('D-B008: the committed conflict indicator stays truthful while a draft fix is staged', async () => {
+  await clean(); const store=await open();
+  try {
+    let state=await store.read();
+    await store.commit(oneOff(),state.revision);
+    state=await store.read(); const id=state.sessions[0].id;
+    await store.recordLeave({therapist:'a-t1',startDate:'2030-01-07',startTime:'09:30',endDate:'2030-01-07',endTime:'10:30'},state.revision);
+    state=await store.read();
+    assert.equal(withConflicts(state).conflicts.length,1);
+    await store.stageDraftChange('a',{kind:'assign',sessionId:id,therapist:'a-t2'},state.revision);
+    state=await store.read();
+    assert.equal(draftIssues(state,'a').length,0);
+    assert.equal(withConflicts(state).conflicts.length,1);
+    assert.equal(withConflicts(state).conflicts[0].session.id,id);
+    assert.equal(state.sessions[0].therapist,'a-t1');
+    await store.commitDraft('a',state.revision);
+    state=await store.read();
+    assert.equal(withConflicts(state).conflicts.length,0);
+  } finally { await store.close(); }
+});
