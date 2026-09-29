@@ -287,3 +287,8 @@ Notification tasks created by a commit are grouped per affected person, one task
 Status: APPROVED by explicit owner answer, 2026-09-28 (resolves the remaining Q-006 displacement-order point)
 
 When Auto resolve must move one of a therapist's other sessions to free weekly-cap hours (SPEC §5 step 3), it prefers the session that is easiest to move: the one whose own relocation needs the fewest further displaced sessions. Ties go to the latest session in that week. The order must be deterministic. Advance notice is not a factor, because nothing changes for clients until the admin commits, and the admin can still override any suggestion.
+
+## D-B018 — Admins may reassign any pod membership, including their own
+Status: APPROVED by explicit owner answer, 2026-09-28 (confirms D-B010)
+
+The clinic has two equal-level admins. Any admin may change any admin's pod assignment, including their own; no additional role, approval step or self-assignment restriction is required. Pod scoping is a working-focus boundary between trusted admins, not a confidentiality control between them. The server still enforces the current assignment on every request.
