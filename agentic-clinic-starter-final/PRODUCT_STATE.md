@@ -166,3 +166,38 @@ The owner explicitly requested that development stop and a handoff be left for a
 ## 2026-09-28 — Claude takeover (D-P042)
 
 The owner handed development to Claude Code and lifted the handoff pause. The Main PM is Opus 5.5, with Sonnet 5.5 `discovery`, `developer` and `qa` workers. Step 1 is a baseline verification (infrastructure, isolated tests, build) and a scope reconciliation of SPEC/DECISIONS against the backlog and code, with no code changes. The US-015 access audit follows. Still awaiting the owner: Q-017, first-admin bootstrap, and a safety-snapshot commit of the uncommitted S4–S6 work. D-P043 sets the usage guard: stop at 70% of the 5-hour or weekly limit. Usage at takeover was 6% of the 5-hour limit and 8% of the weekly limit. UAT held.
+
+## 2026-09-29 — S7 complete (Claude agent team), exact resume point
+
+Branch `wip/codex-handoff`, with one commit per item. S7 is DONE:
+- BUG-012: the engine is now fast at clinic scale. Validation takes about 35 ms at 2,400 sessions, where it took about 11 s before.
+- CHANGE-001: historical alerts no longer block (D-B012).
+- BUG-013: a single staged change can be removed from a draft.
+- CHANGE-002: new leave can be recorded during a draft (D-B015).
+- BUG-014: proposals go stale only on pod-relevant changes, and Auto resolve can re-run.
+- US-016: Auto resolve handles sessions held by a 2nd- or 3rd-ranked therapist (D-B014).
+- CHANGE-003: a fixed displacement order (D-B017).
+- BUG-015: signed-in admins see the real rule messages, redacted for their pod.
+- BUG-016: demo mode is refused in production builds.
+- TASK-011: new rule tests.
+- BUG-017: whole-token redaction.
+- BUG-018: served options cover draft-added sessions.
+- CHANGE-004: notification tasks are grouped per person (D-B016).
+
+Every item passed its developer tests, a PM check and an independent QA check. The web suite passes 71/71 on isolated TEST, and the production build passes. The DEV demo runs at localhost:3000 in `npm run dev`, with synthetic data restored after each browser check.
+
+In progress: the US-015 first-admin CLI tool (D-B013), tested with synthetic TEST accounts only.
+
+Next:
+1. Finish and verify the CLI tool.
+2. Run final end-to-end acceptance of US-005 and US-006 now that Q-017 is resolved. Use a TEST-backed server; do not commit to DEV.
+3. Prepare the M3 Sprint Review for the owner.
+
+Owner-only steps:
+- Run the CLI tool to create the real first admin. The owner types the password.
+- Confirm the PM note on cross-pod blocker dates and the D-B014 fallback reading.
+- Review M3.
+
+UAT stays held, and DEBT-001 (the cleanup pass) comes after M3.
+
+Usage guard (D-P043/D-P044): stop at 70% of either limit, then schedule a resume after the reset. Usage at this checkpoint was 62% of the 5-hour limit and 16% of the weekly limit. The 5-hour window resets at 2026-09-29 07:30 UTC.

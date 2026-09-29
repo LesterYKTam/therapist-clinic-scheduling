@@ -33,6 +33,18 @@ Record one or more therapist leaves first. Schedule conflicts appear on the Cale
 
 The site currently has one trusted local administrator context under the ignored `CLINIC_DEMO_MODE=1` setting. Pod selection in this DEV build is not production access control. Clinic-managed sign-in, an authenticated admin pod-assignment page and pod-scoped JSON reads are in development; scheduling writes are not yet connected. Without explicit demo mode, the main scheduling page and write/PDF APIs return a setup/503 response. UAT remains held; do not use the site with real client data.
 
+## Create the first admin
+
+Owner decision D-B013: the first real admin is created once with a local command-line tool, after the auth migration is applied and the database is running. From `agentic-clinic-starter-final/`, in an interactive terminal:
+
+```
+node scripts/create-first-admin.mjs --env dev
+```
+
+It asks for full name, email, then the password twice with hidden input (minimum 12 characters). Passwords are never accepted as arguments, environment variables or files. It loads the matching ignored `.local/<env>.env` and creates the user with role admin; public sign-up stays disabled. It prints only email, id and pod. Add `--pod <id>` to assign a pod immediately; otherwise assign one on the protected config page (`/config/admins`) after signing in. The tool refuses to run if any admin already exists; create further admins from the config page while signed in (`--allow-additional` overrides this and is not normally needed). Use `--env test` only for synthetic TEST accounts.
+
+See ACCESS_SETUP.md for more detail.
+
 ## Docker prerequisite
 
 `npm run infra:up` requires Docker Desktop's Linux engine to be running. Check it with `docker version --format '{{.Server.Version}}'`; it must print a server version before Compose can start PostgreSQL. If the engine pipe is unavailable, open Docker Desktop and resolve its normal Windows/WSL startup requirement, then repeat the command. Do not substitute SQLite or point tests at DEV.

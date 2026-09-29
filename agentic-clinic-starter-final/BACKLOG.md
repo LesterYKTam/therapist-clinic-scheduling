@@ -660,7 +660,7 @@ Description: Review stack, architecture, dev/test sites, CI, deployment/cost, da
 Source / reason: D-P038 phase2
 Acceptance criteria: Concrete options/tradeoffs discussed; owner-approved plan and verified foundation; approved full development scope and important open rules recorded.
 Priority: P0
-Status: READY
+Status: SUPERSEDED (2026-09-29). The local DEV/TEST foundation it covered was delivered under D-I005, TASK-008 and TASK-009. UAT provisioning remains held.
 Sprint: Infrastructure milestone
 Dependencies: Approved UI M2
 Discovery class: ADJACENT
