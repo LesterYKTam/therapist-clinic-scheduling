@@ -36,3 +36,5 @@ The site currently has one trusted local administrator context under the ignored
 ## Docker prerequisite
 
 `npm run infra:up` requires Docker Desktop's Linux engine to be running. Check it with `docker version --format '{{.Server.Version}}'`; it must print a server version before Compose can start PostgreSQL. If the engine pipe is unavailable, open Docker Desktop and resolve its normal Windows/WSL startup requirement, then repeat the command. Do not substitute SQLite or point tests at DEV.
+
+Demo mode (`CLINIC_DEMO_MODE=1`) works only with `npm run dev` and the test suite. In a production build (`next build` then `next start`, NODE_ENV=production) the app refuses to serve clinic data when the flag is set: pages show a setup error and the clinic and report APIs return 503 "Demo mode is not allowed in a production build". Use sign-in (unset the flag) for anything other than `npm run dev`.

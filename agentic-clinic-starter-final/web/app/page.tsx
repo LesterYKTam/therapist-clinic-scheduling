@@ -8,10 +8,15 @@ import { withConflicts } from "../lib/scheduling.mjs";
 // @ts-expect-error The pod projection is covered by the Node access suite.
 import { podView } from "../lib/pod-view.mjs";
 
+// @ts-expect-error Demo-mode guard is covered by the Node suite.
+import { demoModeGate } from "../lib/demo-mode.mjs";
+
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  if (process.env.CLINIC_DEMO_MODE !== "1") {
+  const { demo, refusal } = demoModeGate();
+  if (refusal) return <main><h1>Setup error</h1><p>Demo mode is not allowed in a production build. Remove CLINIC_DEMO_MODE and configure sign-in.</p></main>;
+  if (!demo) {
     const { auth } = await import("../lib/auth");
     const session = await auth.api.getSession({ headers: await headers() });
     if (!session) redirect("/sign-in");

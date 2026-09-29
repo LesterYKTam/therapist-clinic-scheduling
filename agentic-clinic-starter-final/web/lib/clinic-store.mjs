@@ -1,3 +1,4 @@
+import { ClinicRuleError } from './clinic-error.mjs';
 import pg from 'pg';
 import {
   initialState, validateState, blockersForSetup, createOccurrences,
@@ -55,13 +56,13 @@ export class PostgresClinicStore {
       await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
       if (this.actor) {
         const access = await client.query('SELECT role, "podId" FROM "user" WHERE id=$1 FOR SHARE', [this.actor.id]);
-        if (access.rows[0]?.role !== 'admin' || access.rows[0]?.podId !== this.actor.podId) throw new Error('Admin pod access changed. Refresh and sign in again if needed.');
+        if (access.rows[0]?.role !== 'admin' || access.rows[0]?.podId !== this.actor.podId) throw new ClinicRuleError('Admin pod access changed. Refresh and sign in again if needed.');
       }
       const result = await client.query('SELECT revision, body FROM clinic_state WHERE id=true FOR UPDATE');
       if (!result.rowCount) throw new Error('Clinic state was not initialized.');
       const state = result.rows[0].body;
       state.revision = Number(result.rows[0].revision);
-      if (!Number.isInteger(expectedRevision) || state.revision !== expectedRevision) throw new Error('This preview is stale. Refresh and preview the current schedule again.');
+      if (!Number.isInteger(expectedRevision) || state.revision !== expectedRevision) throw new ClinicRuleError('This preview is stale. Refresh and preview the current schedule again.');
       validateState(state);
       const output = await mutate(state);
       validateState(state);
@@ -71,7 +72,7 @@ export class PostgresClinicStore {
       return { state: clone(state), result: output };
     } catch (error) {
       try { await client.query('ROLLBACK'); } catch {}
-      if (error?.code === '40001') throw new Error('The schedule changed at the same time. Refresh and preview again.');
+      if (error?.code === '40001') throw new ClinicRuleError('The schedule changed at the same time. Refresh and preview again.');
       throw error;
     } finally { client.release(); }
   }
@@ -106,12 +107,12 @@ export class PostgresClinicStore {
 
   requireNoOutstandingConflicts(state,request) {
     const pod=this.requestPod(state,request);
-    if (blockingLeaveConflicts(state).some((issue)=>state.clients.find((item)=>item.id===issue.session.client)?.pod===pod)) throw new Error('Outstanding schedule conflicts must be resolved together before committing schedule changes.');
+    if (blockingLeaveConflicts(state).some((issue)=>state.clients.find((item)=>item.id===issue.session.client)?.pod===pod)) throw new ClinicRuleError('Outstanding schedule conflicts must be resolved together before committing schedule changes.');
   }
 
   requireNoDraftForRequest(state,request) {
     const pod=this.requestPod(state,request);
-    if (pod&&state.drafts.some((draft)=>draft.pod===pod)) throw new Error('This pod has a shared schedule draft. Edit and commit or discard that draft in Calendar first.');
+    if (pod&&state.drafts.some((draft)=>draft.pod===pod)) throw new ClinicRuleError('This pod has a shared schedule draft. Edit and commit or discard that draft in Calendar first.');
   }
 
   createNotificationTasks(state,beforeSessions,afterSessions) {
@@ -133,18 +134,18 @@ export class PostgresClinicStore {
 
   rejectNewLeaveConflicts(state, before) {
     const affected = blockingLeaveConflicts(state).filter(({ session }) => before.get(session.id) !== JSON.stringify(session));
-    if (affected.length) throw new Error('The proposed session overlaps recorded therapist leave. Resolve the leave conflict first.');
+    if (affected.length) throw new ClinicRuleError('The proposed session overlaps recorded therapist leave. Resolve the leave conflict first.');
   }
 
   async recordLeave(request, revision) {
     return this.transaction(revision, (state) => {
       const therapist = state.therapists.find((item) => item.id === String(request.therapist || '') && item.active);
-      if (!therapist) throw new Error('Choose an active therapist.');
+      if (!therapist) throw new ClinicRuleError('Choose an active therapist.');
       const leave = { id: uid('leave'), pod: therapist.pod, therapist: therapist.id,
         startDate: String(request.startDate || ''), startTime: String(request.startTime || ''),
         endDate: String(request.endDate || ''), endTime: String(request.endTime || '') };
       leaveInterval(leave, state.config);
-      if (state.leaves.some((item) => item.therapist === leave.therapist && item.startDate === leave.startDate && item.startTime === leave.startTime && item.endDate === leave.endDate && item.endTime === leave.endTime)) throw new Error('This leave is already recorded.');
+      if (state.leaves.some((item) => item.therapist === leave.therapist && item.startDate === leave.startDate && item.startTime === leave.startTime && item.endDate === leave.endDate && item.endTime === leave.endTime)) throw new ClinicRuleError('This leave is already recorded.');
       state.leaves.push(leave);
       return leave;
     });
@@ -152,12 +153,12 @@ export class PostgresClinicStore {
 
   async amendLeave(pod, leaveId, request, revision) {
     return this.transaction(revision, (state) => {
-      if (state.drafts.some((draft)=>draft.pod===pod)) throw new Error('Commit or discard this pod’s shared schedule draft before changing recorded leave.');
+      if (state.drafts.some((draft)=>draft.pod===pod)) throw new ClinicRuleError('Commit or discard this pod’s shared schedule draft before changing recorded leave.');
       const leave=state.leaves.find((item)=>item.id===leaveId&&item.pod===pod);
-      if (!leave) throw new Error('Recorded leave was not found in this pod.');
+      if (!leave) throw new ClinicRuleError('Recorded leave was not found in this pod.');
       const updated={...leave,startDate:String(request.startDate||''),startTime:String(request.startTime||''),endDate:String(request.endDate||''),endTime:String(request.endTime||'')};
       leaveInterval(updated,state.config);
-      if (state.leaves.some((item)=>item.id!==leave.id&&item.therapist===leave.therapist&&item.startDate===updated.startDate&&item.startTime===updated.startTime&&item.endDate===updated.endDate&&item.endTime===updated.endTime)) throw new Error('This leave is already recorded.');
+      if (state.leaves.some((item)=>item.id!==leave.id&&item.therapist===leave.therapist&&item.startDate===updated.startDate&&item.startTime===updated.startTime&&item.endDate===updated.endDate&&item.endTime===updated.endTime)) throw new ClinicRuleError('This leave is already recorded.');
       Object.assign(leave,updated);
       return clone(leave);
     });
@@ -165,9 +166,9 @@ export class PostgresClinicStore {
 
   async withdrawLeave(pod, leaveId, revision) {
     return this.transaction(revision, (state) => {
-      if (state.drafts.some((draft)=>draft.pod===pod)) throw new Error('Commit or discard this pod’s shared schedule draft before changing recorded leave.');
+      if (state.drafts.some((draft)=>draft.pod===pod)) throw new ClinicRuleError('Commit or discard this pod’s shared schedule draft before changing recorded leave.');
       const index=state.leaves.findIndex((item)=>item.id===leaveId&&item.pod===pod);
-      if (index<0) throw new Error('Recorded leave was not found in this pod.');
+      if (index<0) throw new ClinicRuleError('Recorded leave was not found in this pod.');
       const [removed]=state.leaves.splice(index,1);
       return {leaveId:removed.id};
     });
@@ -178,8 +179,8 @@ export class PostgresClinicStore {
     const existing = current.drafts.find((draft) => draft.pod === pod);
     if (existing) return { state: current, result: existing };
     return this.transaction(revision, (state) => {
-      if (!state.pods.some((item) => item.id === pod)) throw new Error('Choose a valid pod.');
-      if (state.drafts.some((draft) => draft.pod === pod)) throw new Error('This pod already has a shared schedule draft.');
+      if (!state.pods.some((item) => item.id === pod)) throw new ClinicRuleError('Choose a valid pod.');
+      if (state.drafts.some((draft) => draft.pod === pod)) throw new ClinicRuleError('This pod already has a shared schedule draft.');
       const draft = { id: uid('draft'), pod, changes: [], autoResolveRun: false };
       state.drafts.push(draft);
       return draft;
@@ -189,7 +190,7 @@ export class PostgresClinicStore {
   async discardDraft(pod, revision) {
     return this.transaction(revision, (state) => {
       const index = state.drafts.findIndex((draft) => draft.pod === pod);
-      if (index < 0) throw new Error('This pod has no schedule draft to discard.');
+      if (index < 0) throw new ClinicRuleError('This pod has no schedule draft to discard.');
       const [discarded] = state.drafts.splice(index, 1);
       return { draftId: discarded.id };
     });
@@ -198,8 +199,8 @@ export class PostgresClinicStore {
   async handleNotification(pod, taskId, revision) {
     return this.transaction(revision, (state) => {
       const task=state.notifications.find((item)=>item.id===taskId&&item.pod===pod);
-      if (!task) throw new Error('Notification task was not found in this pod.');
-      if (task.status!=='pending') throw new Error('Notification task has already been handled.');
+      if (!task) throw new ClinicRuleError('Notification task was not found in this pod.');
+      if (task.status!=='pending') throw new ClinicRuleError('Notification task has already been handled.');
       task.status='handled';
       task.handledAt=new Date().toISOString();
       return {taskId:task.id,status:task.status};
@@ -208,10 +209,10 @@ export class PostgresClinicStore {
 
   async previewAutoResolve(pod, revision) {
     return this.transaction(revision, (state) => {
-      if (!state.pods.some((item) => item.id === pod)) throw new Error('Choose a valid pod.');
+      if (!state.pods.some((item) => item.id === pod)) throw new ClinicRuleError('Choose a valid pod.');
       let draft = state.drafts.find((item) => item.pod === pod);
       const fingerprint = proposalFingerprint(state, pod);
-      if (draft?.autoResolveRun && draft.autoResolveFingerprint === fingerprint) throw new Error('Auto resolve has already run for this draft and nothing relevant has changed. Change the draft or the pod’s schedule inputs before running it again.');
+      if (draft?.autoResolveRun && draft.autoResolveFingerprint === fingerprint) throw new ClinicRuleError('Auto resolve has already run for this draft and nothing relevant has changed. Change the draft or the pod’s schedule inputs before running it again.');
       if (!draft) { draft = { id: uid('draft'), pod, changes: [], autoResolveRun: false }; state.drafts.push(draft); }
       const plan = boundedResolutionProposal(state, pod);
       draft.autoResolveRun = true;
@@ -224,8 +225,8 @@ export class PostgresClinicStore {
   async applyAutoResolve(pod, revision) {
     return this.transaction(revision, (state) => {
       const draft = state.drafts.find((item) => item.pod === pod);
-      if (!draft?.proposal) throw new Error('There is no Auto resolve proposal to apply.');
-      if (draft.proposal.fingerprint !== proposalFingerprint(state, pod)) throw new Error('The proposal is stale. Discard the suggestions and continue editing this draft manually.');
+      if (!draft?.proposal) throw new ClinicRuleError('There is no Auto resolve proposal to apply.');
+      if (draft.proposal.fingerprint !== proposalFingerprint(state, pod)) throw new ClinicRuleError('The proposal is stale. Discard the suggestions and continue editing this draft manually.');
       draft.changes = clone(draft.proposal.allDraftChanges);
       const applied = clone(draft.proposal.proposed);
       delete draft.proposal;
@@ -236,7 +237,7 @@ export class PostgresClinicStore {
   async discardAutoResolve(pod, revision) {
     return this.transaction(revision, (state) => {
       const draft = state.drafts.find((item) => item.pod === pod);
-      if (!draft?.proposal) throw new Error('There is no Auto resolve proposal to discard.');
+      if (!draft?.proposal) throw new ClinicRuleError('There is no Auto resolve proposal to discard.');
       delete draft.proposal;
       return { draftId: draft.id, suggestionsDiscarded: true };
     });
@@ -245,21 +246,21 @@ export class PostgresClinicStore {
   async stageDraftAdd(pod, request, revision) {
     return this.transaction(revision, (state) => {
       const client = state.clients.find((item)=>item.id===String(request.client||'')&&item.pod===pod&&item.active);
-      if (!client) throw new Error('Choose an active client in this pod.');
+      if (!client) throw new ClinicRuleError('Choose an active client in this pod.');
       const therapist = state.therapists.find((item)=>item.id===String(request.therapist||'')&&item.active&&client.assigned.includes(item.id));
-      if (!therapist) throw new Error('Choose one of this client’s active ranked therapists.');
-      if (!['one-off','weekly'].includes(request.kind)) throw new Error('Choose one session or a weekly series.');
+      if (!therapist) throw new ClinicRuleError('Choose one of this client’s active ranked therapists.');
+      if (!['one-off','weekly'].includes(request.kind)) throw new ClinicRuleError('Choose one session or a weekly series.');
       const date = String(request.date||request.startDate||''), time = String(request.time||'');
       localInstant(date,time,state.config.timezone);
-      if (this.isPastOccurrence(date,time,state.config.timezone)) throw new Error('Past occurrences remain unchanged.');
+      if (this.isPastOccurrence(date,time,state.config.timezone)) throw new ClinicRuleError('Past occurrences remain unchanged.');
       const minutes=Number(request.minutes);
-      if (!Number.isInteger(minutes)||minutes<1||minutes>480) throw new Error('Duration must be between 1 and 480 minutes.');
+      if (!Number.isInteger(minutes)||minutes<1||minutes>480) throw new ClinicRuleError('Duration must be between 1 and 480 minutes.');
       const location=String(request.location||'');
-      if (!['clinic','home'].includes(location)) throw new Error('Choose Clinic or Home.');
+      if (!['clinic','home'].includes(location)) throw new ClinicRuleError('Choose Clinic or Home.');
       const room=location==='home'?null:String(request.room||'');
-      if (location==='clinic'&&!state.rooms.some((item)=>item.id===room&&item.active)) throw new Error('Choose an active shared room.');
+      if (location==='clinic'&&!state.rooms.some((item)=>item.id===room&&item.active)) throw new ClinicRuleError('Choose an active shared room.');
       let draft=state.drafts.find((item)=>item.pod===pod);
-      if (draft?.proposal) throw new Error('Apply or discard the Auto resolve suggestions before manually editing this draft.');
+      if (draft?.proposal) throw new ClinicRuleError('Apply or discard the Auto resolve suggestions before manually editing this draft.');
       if (!draft) { draft={id:uid('draft'),pod,changes:[],autoResolveRun:false}; state.drafts.push(draft); }
       const common={client:client.id,therapist:therapist.id,time,minutes,location,room};
       let additions;
@@ -279,24 +280,24 @@ export class PostgresClinicStore {
 
   async stageDraftChange(pod, change, revision) {
     return this.transaction(revision, (state) => {
-      if (!state.pods.some((item) => item.id === pod)) throw new Error('Choose a valid pod.');
+      if (!state.pods.some((item) => item.id === pod)) throw new ClinicRuleError('Choose a valid pod.');
       const added = state.drafts.find((item)=>item.pod===pod)?.changes.find((item)=>item.kind==='add'&&item.sessionId===String(change.sessionId||''));
       const session = state.sessions.find((item) => item.id === String(change.sessionId || '')) || added?.session;
       const client = state.clients.find((item) => item.id === session?.client);
-      if (!session || client?.pod !== pod) throw new Error('Choose a committed session in this pod.');
-      if (this.isPastOccurrence(session.date, session.time, state.config.timezone)) throw new Error('Past occurrences remain unchanged.');
-      if (!['cancel', 'assign', 'reschedule'].includes(change.kind)) throw new Error('Choose cancellation, therapist reassignment, or rescheduling.');
-      if (['assign','reschedule'].includes(change.kind) && !client.assigned.includes(String(change.therapist || ''))) throw new Error('Choose one of the client’s ranked therapists.');
+      if (!session || client?.pod !== pod) throw new ClinicRuleError('Choose a committed session in this pod.');
+      if (this.isPastOccurrence(session.date, session.time, state.config.timezone)) throw new ClinicRuleError('Past occurrences remain unchanged.');
+      if (!['cancel', 'assign', 'reschedule'].includes(change.kind)) throw new ClinicRuleError('Choose cancellation, therapist reassignment, or rescheduling.');
+      if (['assign','reschedule'].includes(change.kind) && !client.assigned.includes(String(change.therapist || ''))) throw new ClinicRuleError('Choose one of the client’s ranked therapists.');
       if (change.kind === 'reschedule') {
         localInstant(String(change.date || ''), String(change.time || ''), state.config.timezone);
-        if (this.isPastOccurrence(change.date, change.time, state.config.timezone)) throw new Error('Past occurrences remain unchanged.');
-        if (!Number.isInteger(change.minutes) || change.minutes < 1 || change.minutes > 480) throw new Error('Duration must be between 1 and 480 minutes.');
-        if (!['clinic','home'].includes(change.location)) throw new Error('Choose Clinic or Home.');
-        if (change.location === 'clinic' && !state.rooms.some((item) => item.id === change.room && item.active)) throw new Error('Choose an active shared room.');
+        if (this.isPastOccurrence(change.date, change.time, state.config.timezone)) throw new ClinicRuleError('Past occurrences remain unchanged.');
+        if (!Number.isInteger(change.minutes) || change.minutes < 1 || change.minutes > 480) throw new ClinicRuleError('Duration must be between 1 and 480 minutes.');
+        if (!['clinic','home'].includes(change.location)) throw new ClinicRuleError('Choose Clinic or Home.');
+        if (change.location === 'clinic' && !state.rooms.some((item) => item.id === change.room && item.active)) throw new ClinicRuleError('Choose an active shared room.');
       }
       if (added) {
         const draft=state.drafts.find((item)=>item.pod===pod);
-        if (draft.proposal) throw new Error('Apply or discard the Auto resolve suggestions before manually editing this draft.');
+        if (draft.proposal) throw new ClinicRuleError('Apply or discard the Auto resolve suggestions before manually editing this draft.');
         if (change.kind==='cancel') draft.changes=draft.changes.filter((item)=>item.sessionId!==session.id);
         else if (change.kind==='assign') added.session.therapist=String(change.therapist);
         else Object.assign(added.session,{therapist:String(change.therapist),date:String(change.date),time:String(change.time),minutes:change.minutes,location:change.location,room:change.location==='home'?null:String(change.room)});
@@ -304,7 +305,7 @@ export class PostgresClinicStore {
       }
       let draft = state.drafts.find((item) => item.pod === pod);
       if (!draft) { draft = { id: uid('draft'), pod, changes: [], autoResolveRun: false }; state.drafts.push(draft); }
-      if (draft.proposal) throw new Error('Apply or discard the Auto resolve suggestions before manually editing this draft.');
+      if (draft.proposal) throw new ClinicRuleError('Apply or discard the Auto resolve suggestions before manually editing this draft.');
       const previous = draft.changes.find((item) => item.sessionId === session.id);
       draft.changes = draft.changes.filter((item) => item.sessionId !== session.id);
       if (change.kind === 'cancel') draft.changes.push({ kind: 'cancel', sessionId: session.id });
@@ -323,10 +324,10 @@ export class PostgresClinicStore {
   /** Revert one staged change (even for a session that has since started). Other staged changes are kept; a pending proposal goes stale because the draft changes are part of its fingerprint. */
   async removeDraftChange(pod, sessionId, revision) {
     return this.transaction(revision, (state) => {
-      if (!state.pods.some((item) => item.id === pod)) throw new Error('Choose a valid pod.');
+      if (!state.pods.some((item) => item.id === pod)) throw new ClinicRuleError('Choose a valid pod.');
       const draft = state.drafts.find((item) => item.pod === pod);
       const index = draft ? draft.changes.findIndex((item) => item.sessionId === sessionId) : -1;
-      if (index < 0) throw new Error('This staged change is no longer in the draft.');
+      if (index < 0) throw new ClinicRuleError('This staged change is no longer in the draft.');
       const [removed] = draft.changes.splice(index, 1);
       return { draftId: draft.id, removed: clone(removed), changes: clone(draft.changes) };
     });
@@ -335,17 +336,17 @@ export class PostgresClinicStore {
   async commitDraft(pod, revision) {
     return this.transaction(revision, (state) => {
       const draft = state.drafts.find((item) => item.pod === pod);
-      if (!draft || !draft.changes.length) throw new Error('This pod has no schedule changes to commit.');
-      if (draft.proposal) throw new Error('Apply or discard the Auto resolve suggestions before committing the draft.');
+      if (!draft || !draft.changes.length) throw new ClinicRuleError('This pod has no schedule changes to commit.');
+      if (draft.proposal) throw new ClinicRuleError('Apply or discard the Auto resolve suggestions before committing the draft.');
       for (const change of draft.changes) {
         const original=state.sessions.find((item)=>item.id===change.sessionId);
         const session=original||change.session;
-        if (!session || this.isPastOccurrence(session.date,session.time,state.config.timezone) || (change.kind==='reschedule'&&this.isPastOccurrence(change.date,change.time,state.config.timezone))) throw new Error('A drafted session has already started. Remove that change and recheck the draft before committing.');
+        if (!session || this.isPastOccurrence(session.date,session.time,state.config.timezone) || (change.kind==='reschedule'&&this.isPastOccurrence(change.date,change.time,state.config.timezone))) throw new ClinicRuleError('A drafted session has already started. Remove that change and recheck the draft before committing.');
       }
       const issues = draftIssues(state, pod);
-      if (issues.length) throw new Error(`${issues.length} outstanding schedule conflict${issues.length === 1 ? '' : 's'} must be resolved before commit.`);
+      if (issues.length) throw new ClinicRuleError(`${issues.length} outstanding schedule conflict${issues.length === 1 ? '' : 's'} must be resolved before commit.`);
       const { candidate, stale } = draftCandidate(state, pod);
-      if (stale.length) throw new Error('The shared schedule draft contains a changed or removed session. Recheck it.');
+      if (stale.length) throw new ClinicRuleError('The shared schedule draft contains a changed or removed session. Recheck it.');
       validateState(candidate);
       const oldSessions=clone(state.sessions);
       state.sessions = candidate.sessions;
@@ -361,47 +362,47 @@ export class PostgresClinicStore {
     if (request.kind === 'one-off') {
       const date=String(request.date || '');
       localInstant(date,common.time,state.config.timezone);
-      if (this.isPastOccurrence(date,common.time,state.config.timezone)) throw new Error('Past occurrences remain unchanged.');
+      if (this.isPastOccurrence(date,common.time,state.config.timezone)) throw new ClinicRuleError('Past occurrences remain unchanged.');
       state.sessions.push({ id: uid('oneoff'), ...common, date }); return;
     }
     if (request.kind === 'weekly') {
       const startDate=String(request.startDate || ''),endDate=String(request.endDate || '');
       localInstant(startDate,common.time,state.config.timezone);
-      if (this.isPastOccurrence(startDate,common.time,state.config.timezone)) throw new Error('Past occurrences remain unchanged.');
+      if (this.isPastOccurrence(startDate,common.time,state.config.timezone)) throw new ClinicRuleError('Past occurrences remain unchanged.');
       this.assertReasonableSpan(startDate,endDate);
       const series = { id: uid('series'), ...common, startDate, endDate };
       state.series.push(series); state.sessions.push(...createOccurrences(state, series, series.id)); return;
     }
     const item = state.sessions.find((session) => session.id === request.occurrenceId);
-    if (!item) throw new Error('Occurrence no longer exists.');
+    if (!item) throw new ClinicRuleError('Occurrence no longer exists.');
     if (['edit-occurrence','edit-future'].includes(request.kind)) {
       const originalPod=state.clients.find((client)=>client.id===item.client)?.pod;
       const requestedPod=state.clients.find((client)=>client.id===common.client)?.pod;
-      if (!requestedPod || requestedPod!==originalPod) throw new Error('A session cannot move to another pod. Choose a client in the original pod.');
+      if (!requestedPod || requestedPod!==originalPod) throw new ClinicRuleError('A session cannot move to another pod. Choose a client in the original pod.');
     }
     const today = todayInZone(state.config.timezone);
-    if (this.isPastOccurrence(item.date, item.time, state.config.timezone, today)) throw new Error('Past occurrences remain unchanged.');
+    if (this.isPastOccurrence(item.date, item.time, state.config.timezone, today)) throw new ClinicRuleError('Past occurrences remain unchanged.');
     if (request.kind === 'cancel-occurrence') { state.sessions = state.sessions.filter((session) => session.id !== item.id); return; }
     if (request.kind === 'cancel-future') { if (!item.seriesId) { state.sessions = state.sessions.filter((session) => session.id !== item.id); return; } state.sessions = state.sessions.filter((session) => session.seriesId !== item.seriesId || session.date < item.date); const series = state.series.find((value) => value.id === item.seriesId); if (series) series.endDate = addDays(item.date, -7); return; }
-    if (request.kind === 'edit-occurrence') { const date = String(request.date || item.date), time = String(request.time || item.time); if (this.isPastOccurrence(date, time, state.config.timezone, today)) throw new Error('Past occurrences remain unchanged.'); Object.assign(item, common, { date }); return; }
+    if (request.kind === 'edit-occurrence') { const date = String(request.date || item.date), time = String(request.time || item.time); if (this.isPastOccurrence(date, time, state.config.timezone, today)) throw new ClinicRuleError('Past occurrences remain unchanged.'); Object.assign(item, common, { date }); return; }
     if (request.kind === 'edit-future') {
-      if (!item.seriesId) { const date=String(request.date || item.date), time=String(request.time || item.time); if (this.isPastOccurrence(date,time,state.config.timezone,today)) throw new Error('Past occurrences remain unchanged.'); Object.assign(item, common, { date }); return; }
+      if (!item.seriesId) { const date=String(request.date || item.date), time=String(request.time || item.time); if (this.isPastOccurrence(date,time,state.config.timezone,today)) throw new ClinicRuleError('Past occurrences remain unchanged.'); Object.assign(item, common, { date }); return; }
       const old = state.series.find((value) => value.id === item.seriesId);
       const startDate = String(request.date || item.date), endDate = String(request.endDate || old.endDate);
-      if (this.isPastOccurrence(startDate, common.time, state.config.timezone, today) || endDate < startDate) throw new Error('Past occurrences remain unchanged and the end date must follow the new start.');
+      if (this.isPastOccurrence(startDate, common.time, state.config.timezone, today) || endDate < startDate) throw new ClinicRuleError('Past occurrences remain unchanged and the end date must follow the new start.');
       this.assertReasonableSpan(startDate, endDate);
       state.sessions = state.sessions.filter((session) => session.seriesId !== old.id || session.date < item.date);
       old.endDate = addDays(item.date, -7);
       const successor = { id: uid('series'), ...common, startDate, endDate };
       state.series.push(successor); state.sessions.push(...createOccurrences(state, successor, successor.id)); return;
     }
-    throw new Error('Unknown calendar action.');
+    throw new ClinicRuleError('Unknown calendar action.');
   }
 
   assertReasonableSpan(startDate, endDate) {
     const start = Date.parse(`${startDate}T00:00:00Z`), end = Date.parse(`${endDate}T00:00:00Z`);
     if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return datesWeekly(startDate, endDate);
-    if (end - start > 103 * 7 * 86400000) throw new Error('Weekly series cannot exceed 104 occurrences.');
+    if (end - start > 103 * 7 * 86400000) throw new ClinicRuleError('Weekly series cannot exceed 104 occurrences.');
     return datesWeekly(startDate, endDate);
   }
 
@@ -412,15 +413,15 @@ export class PostgresClinicStore {
   async updateSetup(next, revision) {
     return this.transaction(revision, (state) => {
       const after = clone(next); delete after.conflicts; delete after.draftIssues; delete after.proposalStale; after.schema = 2; after.revision = state.revision;
-      if (JSON.stringify(after.leaves) !== JSON.stringify(state.leaves)) throw new Error('Setup cannot alter recorded leave.');
-      if (JSON.stringify(after.drafts) !== JSON.stringify(state.drafts)) throw new Error('Setup cannot alter shared schedule drafts.');
-      if (JSON.stringify(after.notifications) !== JSON.stringify(state.notifications)) throw new Error('Setup cannot alter notification tasks.');
-      if (state.config.timezone !== after.config.timezone && state.drafts.length) throw new Error('Timezone cannot change while shared schedule drafts are open. Commit or discard them first.');
-      if (state.config.timezone !== after.config.timezone && state.leaves.length) throw new Error('Timezone cannot change while recorded leave exists.');
-      if (JSON.stringify(after.sessions) !== JSON.stringify(state.sessions) || JSON.stringify(after.series) !== JSON.stringify(state.series)) throw new Error('Setup cannot alter committed bookings. Use Calendar to reschedule or cancel them.');
+      if (JSON.stringify(after.leaves) !== JSON.stringify(state.leaves)) throw new ClinicRuleError('Setup cannot alter recorded leave.');
+      if (JSON.stringify(after.drafts) !== JSON.stringify(state.drafts)) throw new ClinicRuleError('Setup cannot alter shared schedule drafts.');
+      if (JSON.stringify(after.notifications) !== JSON.stringify(state.notifications)) throw new ClinicRuleError('Setup cannot alter notification tasks.');
+      if (state.config.timezone !== after.config.timezone && state.drafts.length) throw new ClinicRuleError('Timezone cannot change while shared schedule drafts are open. Commit or discard them first.');
+      if (state.config.timezone !== after.config.timezone && state.leaves.length) throw new ClinicRuleError('Timezone cannot change while recorded leave exists.');
+      if (JSON.stringify(after.sessions) !== JSON.stringify(state.sessions) || JSON.stringify(after.series) !== JSON.stringify(state.series)) throw new ClinicRuleError('Setup cannot alter committed bookings. Use Calendar to reschedule or cancel them.');
       const structural = clone(after); structural.sessions = []; structural.series = []; validateState(structural);
       const blockers = blockersForSetup(state, after);
-      if (blockers.length) throw new Error(`Setup change is blocked by committed bookings: ${blockers.join('; ')}`);
+      if (blockers.length) throw new ClinicRuleError(`Setup change is blocked by committed bookings: ${blockers.join('; ')}`);
       validateState(after); Object.assign(state, after);
     });
   }
@@ -428,8 +429,8 @@ export class PostgresClinicStore {
   async report(therapist, month) {
     const state = await this.read();
     const staff = state.therapists.find((item) => item.id === therapist);
-    if (!staff) throw new Error('Unknown staff member.');
-    if (!/^\d{4}-\d{2}$/.test(month)) throw new Error('Month must use YYYY-MM.');
+    if (!staff) throw new ClinicRuleError('Unknown staff member.');
+    if (!/^\d{4}-\d{2}$/.test(month)) throw new ClinicRuleError('Month must use YYYY-MM.');
     const sessions = state.sessions.filter((item) => item.therapist === therapist && item.date.startsWith(month)).sort((a, b) => `${a.date}T${a.time}`.localeCompare(`${b.date}T${b.time}`)).map((item) => ({
       ...item,
       clientName: state.clients.find((client) => client.id === item.client)?.name ?? 'Unknown client',

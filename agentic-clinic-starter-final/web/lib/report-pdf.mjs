@@ -1,3 +1,4 @@
+import { ClinicRuleError } from './clinic-error.mjs';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 import { readFile } from 'node:fs/promises';
@@ -44,7 +45,7 @@ export async function createReportPdf(report) {
   const values = [report.staff.name, ...report.sessions.flatMap((session) => [session.clientName, session.locationName])];
   for (const value of values) {
     for (const character of String(value ?? '')) {
-      if (!supported.has(character.codePointAt(0))) throw new Error(`The PDF font cannot display U+${character.codePointAt(0).toString(16).toUpperCase().padStart(4, '0')} in this report.`);
+      if (!supported.has(character.codePointAt(0))) throw new ClinicRuleError(`The PDF font cannot display U+${character.codePointAt(0).toString(16).toUpperCase().padStart(4, '0')} in this report.`);
     }
   }
   const pages = [];

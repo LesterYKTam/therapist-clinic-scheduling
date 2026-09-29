@@ -55,7 +55,7 @@ test('scheduling engine stays fast at real clinic size and keeps its results', (
   assert.ok(target, 'a session at the same time whose client may see the same therapist');
   const broken = structuredClone(state); broken.sessions.find((s) => s.id === target.id).therapist = clash.therapist;
   const [lo, hi] = [clash.id, target.id].sort((x, y) => Number(x.slice(1)) - Number(y.slice(1)));
-  assert.throws(() => validateState(broken), new RegExp(`^Error: Therapist overlap: ${lo} and ${hi}\\.$`));
+  assert.throws(() => validateState(broken), new RegExp(`^ClinicRuleError: Therapist overlap: ${lo} and ${hi}\\.$`));
 
   // a-t5 is on leave for two weeks starting in week 2.
   const leaveStart = iso(monday.getTime() + 14 * 86400000), leaveEnd = iso(monday.getTime() + 25 * 86400000);

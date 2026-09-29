@@ -8,20 +8,52 @@ import { podView } from "../../../lib/pod-view.mjs";
 // @ts-expect-error The action policy is exercised by the Node access suite.
 import { authorizeClinicAction, mergePodSetup } from "../../../lib/clinic-access.mjs";
 
+// @ts-expect-error Demo-mode guard is exercised by the Node suite.
+import { demoModeGate } from "../../../lib/demo-mode.mjs";
+// @ts-expect-error Rule-error classification is exercised by the Node suite.
+import { isClinicRuleError } from "../../../lib/clinic-error.mjs";
+// @ts-expect-error The pure pod projection is covered by the Node suite.
+import { podTextRedactor } from "../../../lib/pod-view.mjs";
+
 export const dynamic = "force-dynamic";
 
 function store() { return new PostgresClinicStore(); }
 function response(body: unknown, status = 200) { return Response.json(body, { status, headers: { "Cache-Control": "no-store" } }); }
 function error(error: unknown) { return response({ error: error instanceof Error ? error.message : "Unexpected scheduling error." }, 400); }
+const GENERIC_ACTION_ERROR = "Unable to complete this clinic action. Refresh and try again.";
+/**
+ * Intentional rule violations (ClinicRuleError) reach the user, with other pods' names and ids redacted for pod admins.
+ * Everything else (database errors, TypeErrors, bugs) is logged server-side and stays generic.
+ */
+async function actionFailure(caught: unknown, podId: string | null, clinic: InstanceType<typeof PostgresClinicStore> | undefined) {
+  if (!isClinicRuleError(caught)) {
+    console.error("Clinic action failed", caught);
+    return response({ error: GENERIC_ACTION_ERROR }, 500);
+  }
+  let message = (caught as Error).message;
+  if (podId) {
+    try {
+      if (!clinic) throw new Error("no store");
+      message = podTextRedactor(await clinic.read(), podId)(message);
+    } catch (redactionFailure) {
+      // Without the committed state we cannot prove the message is free of other pods' data.
+      console.error("Could not redact clinic action error", redactionFailure);
+      return response({ error: GENERIC_ACTION_ERROR }, 500);
+    }
+  }
+  return response({ error: message }, 400);
+}
 function requestFrom(body: any) {
   const allowed = ["kind", "client", "therapist", "date", "startDate", "endDate", "time", "minutes", "location", "room", "occurrenceId"];
   return Object.fromEntries(allowed.filter((key) => body[key] !== undefined).map((key) => [key, body[key]]));
 }
 
 export async function GET(request: NextRequest) {
+  const { demo, refusal } = demoModeGate();
+  if (refusal) return refusal;
   const clinic = store();
   try {
-    if (process.env.CLINIC_DEMO_MODE !== "1") {
+    if (!demo) {
       const { auth } = await import("../../../lib/auth.ts");
       const session = await auth.api.getSession({ headers: request.headers });
       if (!session || session.user.role !== "admin") return response({ error: "Admin sign in required." }, 401);
@@ -39,11 +71,15 @@ export async function GET(request: NextRequest) {
     const reportStaff = request.nextUrl.searchParams.get("reportStaff");
     const month = request.nextUrl.searchParams.get("month");
     return response(reportStaff && month ? await clinic.report(reportStaff, month) : withConflicts(await clinic.read()));
-  } catch (caught) { return process.env.CLINIC_DEMO_MODE === "1" ? error(caught) : response({ error: "Unable to load clinic data." }, 500); } finally { await clinic.close(); }
+  } catch (caught) {
+    if (demo) return error(caught);
+    console.error("Clinic read failed", caught);
+    return response({ error: "Unable to load clinic data." }, 500); } finally { await clinic.close(); }
 }
 
 export async function POST(request: NextRequest) {
-  const demo = process.env.CLINIC_DEMO_MODE === "1";
+  const { demo, refusal } = demoModeGate();
+  if (refusal) return refusal;
   let clinic: InstanceType<typeof PostgresClinicStore> | undefined;
   let podId: string | null = null;
   let setupChange: any;
@@ -62,7 +98,11 @@ export async function POST(request: NextRequest) {
         authorizeClinicAction(current, podId, body);
         if (body.action === "setup") setupChange = mergePodSetup(current, podId, body.setup);
       }
-      catch { return response({ error: "This action is not available for your assigned pod." }, 403); }
+      catch (caught) {
+        if (!isClinicRuleError(caught)) return await actionFailure(caught, podId, clinic);
+        // Authorization and Setup-scope messages are static text with no clinic data.
+        return response({ error: (caught as Error).message || "This action is outside your assigned pod." }, 403);
+      }
     }
     // No caller-supplied role, person id, pod identity, or state snapshot is authority.
     const actionResponse = async (pending: Promise<any>) => {
@@ -86,6 +126,6 @@ export async function POST(request: NextRequest) {
     if (body.action === "commit-draft") return await actionResponse(clinic.commitDraft(String(body.pod || ""), Number(body.revision)));
     if (body.action === "handle-notification") return await actionResponse(clinic.handleNotification(String(body.pod || ""), String(body.taskId || ""), Number(body.revision)));
     return response({ error: "Unknown action." }, 400);
-  } catch (caught) { return demo ? error(caught) : response({ error: "Unable to complete this clinic action. Refresh and try again." }, 400); }
+  } catch (caught) { return demo ? error(caught) : await actionFailure(caught, podId, clinic); }
   finally { await clinic?.close(); }
 }

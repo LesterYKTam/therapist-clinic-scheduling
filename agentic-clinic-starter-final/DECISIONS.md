@@ -295,3 +295,6 @@ The clinic has two equal-level admins. Any admin may change any admin's pod assi
 
 ## PM note on D-B008 — Auto resolve re-runs (2026-09-29)
 This note interprets D-B008 and does not change it. "Auto resolve runs once for an unchanged editing session" means a second run is allowed only after an input relevant to that pod has changed since the last run. Relevant inputs are the pod's people, sessions, leave or draft changes, clinic rooms and config, and other pods' room bookings. Unrelated clinic activity no longer makes a pending proposal stale (BUG-014).
+
+## PM note — cross-pod detail in Setup blocker messages (2026-09-29, owner may overrule)
+When a clinic-wide Setup change is blocked by another pod's booking, such as deactivating a shared room or changing the timezone, the error shows that booking's date and time and the shared room. The other pod's client and therapist names and ids are redacted. This is accepted under D-B018: pod scoping is a working-focus boundary between trusted admins, and the date lets the two admins coordinate. If the owner wants strict redaction, the fix is to collapse foreign blockers into a count ("N bookings in another pod").

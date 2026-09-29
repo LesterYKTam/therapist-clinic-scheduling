@@ -1,3 +1,4 @@
+import { ClinicRuleError } from './clinic-error.mjs';
 /** Web-local copy of the accepted pure S4 scheduling policy. */
 /** Shared local-calendar policy for committed normal scheduling (S4). */
 const DAY_MS = 86400000;
@@ -19,13 +20,13 @@ export function initialState() {
 }
 
 const parseDate = date => {
-  if (!isoDate.test(date)) throw new Error('Date must use YYYY-MM-DD.');
+  if (!isoDate.test(date)) throw new ClinicRuleError('Date must use YYYY-MM-DD.');
   const ms = Date.parse(`${date}T00:00:00Z`);
-  if (!Number.isFinite(ms) || new Date(ms).toISOString().slice(0,10) !== date) throw new Error('Date is not valid.');
+  if (!Number.isFinite(ms) || new Date(ms).toISOString().slice(0,10) !== date) throw new ClinicRuleError('Date is not valid.');
   return ms;
 };
 const minutesAt = value => {
-  if (!clock.test(value)) throw new Error('Time must use HH:MM.');
+  if (!clock.test(value)) throw new ClinicRuleError('Time must use HH:MM.');
   const [hour, minute] = value.split(':').map(Number); return hour * 60 + minute;
 };
 const formatters = new Map();
@@ -44,7 +45,7 @@ const formatted = (ms, zone) => {
 export function localInstant(date, time, zone) {
   const cacheKey=`${zone}|${date}|${time}`; if (localCache.has(cacheKey)) return localCache.get(cacheKey);
   parseDate(date); minutesAt(time);
-  if (!validZones.has(zone)) { try { new Intl.DateTimeFormat('en', {timeZone:zone}).format(); } catch { throw new Error('Configured timezone is invalid.'); } validZones.add(zone); }
+  if (!validZones.has(zone)) { try { new Intl.DateTimeFormat('en', {timeZone:zone}).format(); } catch { throw new ClinicRuleError('Configured timezone is invalid.'); } validZones.add(zone); }
   const base = Date.parse(`${date}T${time}:00Z`);
   // Only the zone offsets in force within +/-14 h of the wall time can produce this wall time, so sample those (a handful of
   // formatter calls) instead of probing every 15-minute offset. Ambiguous fall times still choose the earlier instant.
@@ -58,7 +59,7 @@ export function localInstant(date, time, zone) {
     const actual = formatted(candidate, zone);
     if (actual.date === date && actual.time === time) candidates.push(candidate);
   }
-  if (!candidates.length) throw new Error(`Local time ${date} ${time} does not exist in ${zone} (DST transition).`);
+  if (!candidates.length) throw new ClinicRuleError(`Local time ${date} ${time} does not exist in ${zone} (DST transition).`);
   const result=Math.min(...candidates); localCache.set(cacheKey,result); return result;
 }
 
@@ -69,7 +70,7 @@ export function interval(session, config) {
 export function leaveInterval(leave, config) {
   const start = localInstant(leave.startDate, leave.startTime, config.timezone);
   const end = localInstant(leave.endDate, leave.endTime, config.timezone);
-  if (end <= start) throw new Error('Leave end must be after its start.');
+  if (end <= start) throw new ClinicRuleError('Leave end must be after its start.');
   return [start, end];
 }
 export function leaveConflicts(data) {
@@ -485,7 +486,7 @@ export function weekKey(date, weekStart = 1) {
 }
 export function addDays(date, days) { return new Date(parseDate(date) + days * DAY_MS).toISOString().slice(0,10); }
 export function datesWeekly(start, end) {
-  if (parseDate(end) < parseDate(start)) throw new Error('Series end date must be on or after its start date.');
+  if (parseDate(end) < parseDate(start)) throw new ClinicRuleError('Series end date must be on or after its start date.');
   const values=[]; for (let date=start; parseDate(date) <= parseDate(end); date=addDays(date,7)) values.push(date); return values;
 }
 const active = (items, id) => items.find(x => x.id === id && x.active);
@@ -493,44 +494,44 @@ export const isPast = (date, nowDate = todayInZone('America/Toronto')) => date <
 export function todayInZone(zone) { return formatted(Date.now(), zone).date; }
 
 export function validateState(data, {allowHistoric = true} = {}) {
-  if (!data || data.schema !== 2 || !Number.isInteger(data.revision) || data.revision < 0) throw new Error('Unsupported clinic data.');
+  if (!data || data.schema !== 2 || !Number.isInteger(data.revision) || data.revision < 0) throw new ClinicRuleError('Unsupported clinic data.');
   const c = data.config;
   if (c && c.cascadeDepth === undefined) c.cascadeDepth = 1; // Existing S4 PostgreSQL snapshots predate this setting.
-  if (!c || !Array.isArray(c.workingDays) || !c.workingDays.length || new Set(c.workingDays).size !== c.workingDays.length || c.workingDays.some(day => !Number.isInteger(day) || day < 1 || day > 7) || !Number.isInteger(c.weekStart) || c.weekStart < 1 || c.weekStart > 7 || !Number.isInteger(c.recurrenceWeeks) || c.recurrenceWeeks < 1 || c.recurrenceWeeks > 104) throw new Error('Invalid calendar configuration.');
-  if (![0,1,2].includes(c.cascadeDepth)) throw new Error('Automatic cascade depth must be 0, 1, or 2.');
+  if (!c || !Array.isArray(c.workingDays) || !c.workingDays.length || new Set(c.workingDays).size !== c.workingDays.length || c.workingDays.some(day => !Number.isInteger(day) || day < 1 || day > 7) || !Number.isInteger(c.weekStart) || c.weekStart < 1 || c.weekStart > 7 || !Number.isInteger(c.recurrenceWeeks) || c.recurrenceWeeks < 1 || c.recurrenceWeeks > 104) throw new ClinicRuleError('Invalid calendar configuration.');
+  if (![0,1,2].includes(c.cascadeDepth)) throw new ClinicRuleError('Automatic cascade depth must be 0, 1, or 2.');
   localInstant('2026-01-05', c.open, c.timezone); localInstant('2026-01-05', c.close, c.timezone);
-  if (minutesAt(c.open) >= minutesAt(c.close)) throw new Error('Opening time must be before closing time.');
+  if (minutesAt(c.open) >= minutesAt(c.close)) throw new ClinicRuleError('Opening time must be before closing time.');
   data.leaves ??= []; // Existing S4 PostgreSQL snapshots predate leave support.
   data.drafts ??= []; // One shared unfinished draft per pod, added after S5.
   data.notifications ??= []; // Existing S4 snapshots predate the notification worklist.
-  for (const key of ['pods','therapists','clients','rooms','series','sessions','leaves','drafts','notifications']) if (!Array.isArray(data[key]) || new Set(data[key].map(x => x.id)).size !== data[key].length) throw new Error(`Invalid or duplicate ${key} records.`);
+  for (const key of ['pods','therapists','clients','rooms','series','sessions','leaves','drafts','notifications']) if (!Array.isArray(data[key]) || new Set(data[key].map(x => x.id)).size !== data[key].length) throw new ClinicRuleError(`Invalid or duplicate ${key} records.`);
   for (const task of data.notifications) {
-    if (!task.id || !task.sessionId || !['client','therapist'].includes(task.recipientRole) || !['pending','handled'].includes(task.status) || !['added','changed','cancelled'].includes(task.changeType) || !data.pods.some((pod)=>pod.id===task.pod) || !data[task.recipientRole==='client'?'clients':'therapists'].some((person)=>person.id===task.recipientId&&person.pod===task.pod)) throw new Error('Invalid notification task.');
-    for (const snapshot of [task.before,task.after]) if (snapshot!==undefined&&snapshot!==null&&(!snapshot.date||!snapshot.time||!Number.isInteger(snapshot.minutes)||!snapshot.client||!snapshot.therapist||!['clinic','home'].includes(snapshot.location))) throw new Error('Invalid notification session details.');
+    if (!task.id || !task.sessionId || !['client','therapist'].includes(task.recipientRole) || !['pending','handled'].includes(task.status) || !['added','changed','cancelled'].includes(task.changeType) || !data.pods.some((pod)=>pod.id===task.pod) || !data[task.recipientRole==='client'?'clients':'therapists'].some((person)=>person.id===task.recipientId&&person.pod===task.pod)) throw new ClinicRuleError('Invalid notification task.');
+    for (const snapshot of [task.before,task.after]) if (snapshot!==undefined&&snapshot!==null&&(!snapshot.date||!snapshot.time||!Number.isInteger(snapshot.minutes)||!snapshot.client||!snapshot.therapist||!['clinic','home'].includes(snapshot.location))) throw new ClinicRuleError('Invalid notification session details.');
   }
-  if (new Set(data.drafts.map((draft) => draft.pod)).size !== data.drafts.length) throw new Error('Only one shared schedule draft is allowed per pod.');
+  if (new Set(data.drafts.map((draft) => draft.pod)).size !== data.drafts.length) throw new ClinicRuleError('Only one shared schedule draft is allowed per pod.');
   for (const draft of data.drafts) {
-    if (!draft.id || !data.pods.some((pod) => pod.id === draft.pod) || !Array.isArray(draft.changes) || typeof draft.autoResolveRun !== 'boolean' || new Set(draft.changes.map((change)=>change.sessionId)).size !== draft.changes.length) throw new Error('Invalid unfinished schedule draft.');
-    if (draft.proposal && (!draft.autoResolveRun || !(typeof draft.proposal.fingerprint==='string'||Number.isInteger(draft.proposal.sourceRevision)) || !Array.isArray(draft.proposal.proposed) || !Array.isArray(draft.proposal.allDraftChanges) || !Array.isArray(draft.proposal.unresolved) || !Array.isArray(draft.proposal.stops))) throw new Error('Invalid Auto resolve proposal.');
-    for (const change of draft.changes) if (!change.sessionId || !['add','cancel','assign','reschedule'].includes(change.kind) || (change.kind==='add'&&(!change.session||change.session.id!==change.sessionId||!data.clients.some((client)=>client.id===change.session.client&&client.pod===draft.pod)||Boolean(change.series)!==Boolean(change.session.seriesId)||(change.series&&change.series.id!==change.session.seriesId))) || (change.kind==='assign'&&!change.therapist) || (change.kind==='reschedule'&&(!change.therapist||!change.date||!change.time||!Number.isInteger(change.minutes)||!['clinic','home'].includes(change.location)||(!change.room&&change.location==='clinic')||(change.location==='home'&&change.room!==null)))) throw new Error('Invalid draft schedule change.');
+    if (!draft.id || !data.pods.some((pod) => pod.id === draft.pod) || !Array.isArray(draft.changes) || typeof draft.autoResolveRun !== 'boolean' || new Set(draft.changes.map((change)=>change.sessionId)).size !== draft.changes.length) throw new ClinicRuleError('Invalid unfinished schedule draft.');
+    if (draft.proposal && (!draft.autoResolveRun || !(typeof draft.proposal.fingerprint==='string'||Number.isInteger(draft.proposal.sourceRevision)) || !Array.isArray(draft.proposal.proposed) || !Array.isArray(draft.proposal.allDraftChanges) || !Array.isArray(draft.proposal.unresolved) || !Array.isArray(draft.proposal.stops))) throw new ClinicRuleError('Invalid Auto resolve proposal.');
+    for (const change of draft.changes) if (!change.sessionId || !['add','cancel','assign','reschedule'].includes(change.kind) || (change.kind==='add'&&(!change.session||change.session.id!==change.sessionId||!data.clients.some((client)=>client.id===change.session.client&&client.pod===draft.pod)||Boolean(change.series)!==Boolean(change.session.seriesId)||(change.series&&change.series.id!==change.session.seriesId))) || (change.kind==='assign'&&!change.therapist) || (change.kind==='reschedule'&&(!change.therapist||!change.date||!change.time||!Number.isInteger(change.minutes)||!['clinic','home'].includes(change.location)||(!change.room&&change.location==='clinic')||(change.location==='home'&&change.room!==null)))) throw new ClinicRuleError('Invalid draft schedule change.');
   }
   const names = new Set();
-  for (const person of [...data.therapists, ...data.clients]) { const key = String(person.name || '').trim().toLocaleLowerCase(); if (!person.id || !key || names.has(key)) throw new Error('Duplicate or invalid person identity.'); names.add(key); }
-  for (const t of data.therapists) if (!data.pods.some(p=>p.id===t.pod) || typeof t.active !== 'boolean' || !Number.isFinite(t.capHours) || t.capHours <= 0) throw new Error('Invalid therapist pod, active state, or weekly cap.');
+  for (const person of [...data.therapists, ...data.clients]) { const key = String(person.name || '').trim().toLocaleLowerCase(); if (!person.id || !key || names.has(key)) throw new ClinicRuleError('Duplicate or invalid person identity.'); names.add(key); }
+  for (const t of data.therapists) if (!data.pods.some(p=>p.id===t.pod) || typeof t.active !== 'boolean' || !Number.isFinite(t.capHours) || t.capHours <= 0) throw new ClinicRuleError('Invalid therapist pod, active state, or weekly cap.');
   for (const client of data.clients) {
-    if (!data.pods.some(p=>p.id===client.pod) || typeof client.active !== 'boolean' || !Array.isArray(client.assigned) || client.assigned.length !== 3 || new Set(client.assigned).size !== 3) throw new Error('Client requires three distinct ranked therapists.');
-    if (client.assigned.some(id => !data.therapists.some(t => t.id === id && t.pod === client.pod))) throw new Error('Assigned therapist must belong to the client pod.');
+    if (!data.pods.some(p=>p.id===client.pod) || typeof client.active !== 'boolean' || !Array.isArray(client.assigned) || client.assigned.length !== 3 || new Set(client.assigned).size !== 3) throw new ClinicRuleError('Client requires three distinct ranked therapists.');
+    if (client.assigned.some(id => !data.therapists.some(t => t.id === id && t.pod === client.pod))) throw new ClinicRuleError('Assigned therapist must belong to the client pod.');
   }
-  for (const room of data.rooms) if (!room.id || !String(room.name || '').trim() || typeof room.active !== 'boolean') throw new Error('Invalid room.');
+  for (const room of data.rooms) if (!room.id || !String(room.name || '').trim() || typeof room.active !== 'boolean') throw new ClinicRuleError('Invalid room.');
   for (const leave of data.leaves) {
-    if (!leave.id || !data.therapists.some((t) => t.id === leave.therapist && t.pod === leave.pod) || !data.pods.some((p) => p.id === leave.pod)) throw new Error('Leave requires a therapist in its pod.');
+    if (!leave.id || !data.therapists.some((t) => t.id === leave.therapist && t.pod === leave.pod) || !data.pods.some((p) => p.id === leave.pod)) throw new ClinicRuleError('Leave requires a therapist in its pod.');
     leaveInterval(leave, c);
   }
   const lookups = shapeLookups(data);
   for (const s of data.sessions) validateSessionShape(data, s, {allowHistoric, lookups});
   assertNoOverlaps(data.sessions, c);
   const loads = new Map(); for (const s of data.sessions) { const key=`${s.therapist}:${weekKey(s.date,c.weekStart)}`; loads.set(key,(loads.get(key)||0)+s.minutes); }
-  for (const [key, minutes] of loads) { const therapist = data.therapists.find(t=>key.startsWith(`${t.id}:`)); if (minutes > therapist.capHours * 60) throw new Error(`Weekly cap exceeded for ${therapist.name}.`); }
+  for (const [key, minutes] of loads) { const therapist = data.therapists.find(t=>key.startsWith(`${t.id}:`)); if (minutes > therapist.capHours * 60) throw new ClinicRuleError(`Weekly cap exceeded for ${therapist.name}.`); }
   return data;
 }
 
@@ -552,22 +553,22 @@ function assertNoOverlaps(sessions, config) {
       }
     }
   });
-  if (best) throw new Error(`${best.label} overlap: ${sessions[best.lo].id} and ${sessions[best.hi].id}.`);
+  if (best) throw new ClinicRuleError(`${best.label} overlap: ${sessions[best.lo].id} and ${sessions[best.hi].id}.`);
 }
 
 export function validateSessionShape(data, s, {allowHistoric = true, lookups = null} = {}) {
   const historic=allowHistoric && interval(s,data.config)[0] < Date.now();
   const lk = lookups || { client: (id) => data.clients.find((item)=>item.id===id), therapist: (id) => data.therapists.find((item)=>item.id===id), room: (id) => data.rooms.find((room)=>room.id===id), series: (id) => data.series.some((series)=>series.id===id) };
   const client=lk.client(s.client), therapist=lk.therapist(s.therapist);
-  if (!s.id || !client || !therapist || client.pod !== therapist.pod || (!historic && (!client.active || !therapist.active || !client.assigned.includes(therapist.id)))) throw new Error('Session requires an active client and one of its assigned therapists.');
-  if (!Number.isInteger(s.minutes) || s.minutes <= 0 || s.minutes > 480) throw new Error('Duration must be between 1 and 480 minutes.');
+  if (!s.id || !client || !therapist || client.pod !== therapist.pod || (!historic && (!client.active || !therapist.active || !client.assigned.includes(therapist.id)))) throw new ClinicRuleError('Session requires an active client and one of its assigned therapists.');
+  if (!Number.isInteger(s.minutes) || s.minutes <= 0 || s.minutes > 480) throw new ClinicRuleError('Duration must be between 1 and 480 minutes.');
   localInstant(s.date,s.time,data.config.timezone);
   const localStart=minutesAt(s.time), localEnd=localStart+s.minutes;
-  if (!historic && (!data.config.workingDays.includes(weekday(s.date)) || localStart < minutesAt(data.config.open) || localEnd > minutesAt(data.config.close))) throw new Error('Session falls outside configured working days or office hours.');
-  if (!['clinic','home'].includes(s.location)) throw new Error('Location must be Clinic or Home.');
-  if (s.location === 'home' && s.room !== null) throw new Error('Home sessions cannot reserve a room.');
-  if (s.location === 'clinic' && !((room)=>room&&(historic||room.active))(lk.room(s.room))) throw new Error(`Clinic session requires active shared room ${s.room}.`);
-  if (s.seriesId !== undefined && s.seriesId !== null && !lk.series(s.seriesId)) throw new Error('Session refers to an unknown series.');
+  if (!historic && (!data.config.workingDays.includes(weekday(s.date)) || localStart < minutesAt(data.config.open) || localEnd > minutesAt(data.config.close))) throw new ClinicRuleError('Session falls outside configured working days or office hours.');
+  if (!['clinic','home'].includes(s.location)) throw new ClinicRuleError('Location must be Clinic or Home.');
+  if (s.location === 'home' && s.room !== null) throw new ClinicRuleError('Home sessions cannot reserve a room.');
+  if (s.location === 'clinic' && !((room)=>room&&(historic||room.active))(lk.room(s.room))) throw new ClinicRuleError(`Clinic session requires active shared room ${s.room}.`);
+  if (s.seriesId !== undefined && s.seriesId !== null && !lk.series(s.seriesId)) throw new ClinicRuleError('Session refers to an unknown series.');
 }
 
 export function blockersForSetup(before, after) {

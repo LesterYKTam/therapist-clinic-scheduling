@@ -1,14 +1,11 @@
+import { ClinicRuleError } from './clinic-error.mjs';
 /** A pod admin's read model. Keep clinic-wide room inventory, but no other pod's people or bookings. */
 import { workableAssignmentsFor } from './scheduling.mjs';
 
-export function podView(state, podId) {
-  const pod = state.pods.find((item) => item.id === podId);
-  if (!pod) throw new Error('An assigned pod is required.');
-  const clients = state.clients.filter((item) => item.pod === podId);
-  const clientIds = new Set(clients.map((item) => item.id));
-  const sessions = state.sessions.filter((item) => clientIds.has(item.client));
-  const ownSessionIds = new Set(sessions.map((item) => item.id));
-  const issueSessionIds = new Set((state.draftIssues?.[podId] || []).map((item) => item.sessionId));
+/** Returns a function that replaces other pods' client/therapist names and ids and session ids in text. */
+export function podTextRedactor(state, podId) {
+  const ownClientIds = new Set(state.clients.filter((item) => item.pod === podId).map((item) => item.id));
+  const ownSessionIds = new Set(state.sessions.filter((item) => ownClientIds.has(item.client)).map((item) => item.id));
   const foreignTokens = [
     ...state.clients.filter((item) => item.pod !== podId).flatMap((item) => [item.id, item.name]),
     ...state.therapists.filter((item) => item.pod !== podId).flatMap((item) => [item.id, item.name]),
@@ -17,7 +14,7 @@ export function podView(state, podId) {
   // Longest token wins at each position; tokens are looked up by length so cost does not grow with the clinic's history.
   const tokenSet = new Set(foreignTokens);
   const tokenLengths = [...new Set(foreignTokens.map((token) => token.length))].sort((a, b) => b - a);
-  const hide = (text) => {
+  return (text) => {
     let out = '', from = 0, at = 0;
     while (at < text.length) {
       const length = tokenLengths.find((size) => at + size <= text.length && tokenSet.has(text.slice(at, at + size)));
@@ -26,6 +23,16 @@ export function podView(state, podId) {
     }
     return from === 0 ? text : out + text.slice(from);
   };
+}
+
+export function podView(state, podId) {
+  const pod = state.pods.find((item) => item.id === podId);
+  if (!pod) throw new ClinicRuleError('An assigned pod is required.');
+  const clients = state.clients.filter((item) => item.pod === podId);
+  const clientIds = new Set(clients.map((item) => item.id));
+  const sessions = state.sessions.filter((item) => clientIds.has(item.client));
+  const issueSessionIds = new Set((state.draftIssues?.[podId] || []).map((item) => item.sessionId));
+  const hide = podTextRedactor(state, podId);
   const redact = (value) => {
     if (typeof value === 'string') return hide(value);
     if (Array.isArray(value)) return value.map(redact);

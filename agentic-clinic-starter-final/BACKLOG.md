@@ -811,7 +811,7 @@ Description: In authenticated mode every POST failure is flattened to "Unable to
 Source / reason: QA review D4
 Acceptance criteria: Business-rule validation messages reach the authenticated user. Internal or unexpected errors stay generic and are logged on the server. No data from other pods leaks through a message. Covered by tests.
 Priority: P1
-Status: READY
+Status: DONE (2026-09-29). 61/61 tests pass. Uses a ClinicRuleError class, redacts messages against the actor pod, and returns a generic 500 for internal errors. QA found that Setup-blocker messages show the date and time of other pods' bookings (names and ids redacted). The PM accepted this under D-B018 and recorded the note in DECISIONS.md.
 Sprint: S7
 Dependencies: none
 Discovery class: ADJACENT
@@ -823,7 +823,7 @@ Description: CLINIC_DEMO_MODE=1 bypasses authentication and returns the whole cl
 Source / reason: QA review D3
 Acceptance criteria: The app refuses to serve when NODE_ENV is production and demo mode is set, or demo mode is otherwise impossible outside local DEV/TEST. Documented. Covered by a test.
 Priority: P1
-Status: READY
+Status: DONE (2026-09-29). Demo mode is centralised in demo-mode.mjs and refused with a 503 in production builds. QA verified all routes and the page.
 Sprint: S7
 Dependencies: none
 Discovery class: ADJACENT

@@ -1,13 +1,18 @@
 import type { NextRequest } from "next/server";
 // @ts-expect-error JavaScript store is exercised directly by the Node integration suite.
 import { PostgresClinicStore } from "../../../../lib/clinic-store.mjs";
+// @ts-expect-error Demo-mode guard is exercised by the Node suite.
+import { demoModeGate } from "../../../../lib/demo-mode.mjs";
+// @ts-expect-error Rule-error classification is exercised by the Node suite.
+import { isClinicRuleError } from "../../../../lib/clinic-error.mjs";
 // @ts-expect-error Response helper is exercised directly by the Node integration suite.
 import { reportPdfResponse } from "../../../../lib/report-response.mjs";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
-  const demo = process.env.CLINIC_DEMO_MODE === "1";
+  const { demo, refusal } = demoModeGate();
+  if (refusal) return refusal;
   let podId: string | null = null;
   if (!demo) {
     const { auth } = await import("../../../../lib/auth.ts");
@@ -27,6 +32,9 @@ export async function GET(request: NextRequest) {
     }
     return await reportPdfResponse(clinic, staff, month);
   } catch (caught) {
-    return Response.json({ error: demo && caught instanceof Error ? caught.message : "Unable to generate report." }, { status: 400, headers: { "Cache-Control": "no-store" } });
+    // Report rule messages carry no client data; anything unexpected stays generic and is logged.
+    if (isClinicRuleError(caught) || (demo && caught instanceof Error)) return Response.json({ error: (caught as Error).message }, { status: 400, headers: { "Cache-Control": "no-store" } });
+    console.error("Report generation failed", caught);
+    return Response.json({ error: "Unable to generate report." }, { status: 500, headers: { "Cache-Control": "no-store" } });
   } finally { await clinic.close(); }
 }
