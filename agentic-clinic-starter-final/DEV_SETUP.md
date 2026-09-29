@@ -50,3 +50,13 @@ See ACCESS_SETUP.md for more detail.
 `npm run infra:up` requires Docker Desktop's Linux engine to be running. Check it with `docker version --format '{{.Server.Version}}'`; it must print a server version before Compose can start PostgreSQL. If the engine pipe is unavailable, open Docker Desktop and resolve its normal Windows/WSL startup requirement, then repeat the command. Do not substitute SQLite or point tests at DEV.
 
 Demo mode (`CLINIC_DEMO_MODE=1`) works only with `npm run dev` and the test suite. In a production build (`next build` then `next start`, NODE_ENV=production) the app refuses to serve clinic data when the flag is set: pages show a setup error and the clinic and report APIs return 503 "Demo mode is not allowed in a production build". Use sign-in (unset the flag) for anything other than `npm run dev`.
+
+## Demo data
+
+To replace the clinic data in DEV with a synthetic demo clinic (2 pods, 10 therapists, 20 clients, 15 rooms, about 10 weeks of weekly sessions, plus pre-built leave scenarios), run from `agentic-clinic-starter-final/`:
+
+```
+node scripts/seed-demo.mjs --env dev
+```
+
+All dates are relative to the run date, so it can be re-run on any day (re-running replaces the clinic data again and bumps the revision). It replaces only the clinic scheduling state; sign-in accounts and admin pod assignments are untouched, and pod ids `a` (Maple) and `b` (Cedar) are kept. Only `--env dev` and `--env test` are accepted, and the target database and port are checked first. Scenarios: Maple therapist Morgan Testerson has next-week Tue 09:00 to Wed 17:00 leave (5 conflicts; Auto resolve gives 2 direct, 1 cascade, 1 rank-3 fallback, 1 unresolved); last Thursday's Maple leave gives one historical alert; Cedar has next-Thursday-morning leave with 2 conflicts, left unresolved. No drafts or notifications are created.
