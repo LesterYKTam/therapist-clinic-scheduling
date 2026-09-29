@@ -876,3 +876,114 @@ test('D-B015: new pod leave during a draft saves, adds issues, and stales a pend
     assert.equal(state.sessions[0].therapist,'a-t1');
   } finally { await store.close(); }
 });
+
+// US-016 (D-B014) and CHANGE-003 (D-B017)
+const rankVisit=(id,client,therapist,room,date='2030-01-07',time='09:00')=>({id,client,therapist,date,time,minutes:60,location:'clinic',room});
+const rankLeave=(therapist,date='2030-01-07')=>({id:`leave-${therapist}-${date}`,pod:'a',therapist,startDate:date,startTime:'09:00',endDate:date,endTime:'10:00'});
+const moved=(plan)=>new Map(plan.proposed.map((item)=>[item.change.sessionId,item.change.therapist]));
+test('US-016: a session held by the 2nd-ranked therapist resolves to the major when the major is free', () => {
+  const state=initialState();
+  state.sessions.push(rankVisit('held-2','a-c1','a-t2','room-1'));
+  state.leaves.push(rankLeave('a-t2'));
+  const plan=boundedResolutionProposal(state,'a');
+  assert.deepEqual(moved(plan),new Map([['held-2','a-t1']]));
+  assert.equal(plan.proposed[0].rank,1);
+  assert.equal(plan.unresolved.length,0);
+  assert.equal(plan.stops.length,0);
+  assert.equal(state.sessions[0].therapist,'a-t2');
+});
+test('US-016: 2nd-ranked holder falls back to the 3rd without cascading when the major is blocked', () => {
+  const state=initialState();
+  state.config.cascadeDepth=0;
+  state.clients.push({id:'a-c2',pod:'a',name:'Blocker',active:true,assigned:['a-t1','a-t3','a-t2']});
+  state.sessions.push(rankVisit('held-2','a-c1','a-t2','room-1'),rankVisit('block-major','a-c2','a-t1','room-2'));
+  state.leaves.push(rankLeave('a-t2'));
+  const plan=boundedResolutionProposal(state,'a');
+  assert.deepEqual(moved(plan),new Map([['held-2','a-t3']]));
+  assert.equal(plan.proposed[0].rank,3);
+  assert.equal(plan.proposed[0].displacedBy,null);
+  // With the 3rd also busy, depth 1 must not cascade on the last alternative; the session stops with an explanation.
+  state.config.cascadeDepth=1;
+  state.clients.push({id:'a-c3',pod:'a',name:'Blocker Three',active:true,assigned:['a-t3','a-t2','a-t1']});
+  state.sessions.push(rankVisit('block-third','a-c3','a-t3','room-3'));
+  state.clients.find((item)=>item.id==='a-c2').assigned=['a-t1'];
+  const stuck=boundedResolutionProposal(state,'a');
+  assert.equal(stuck.proposed.length,0);
+  assert.match(stuck.stops[0].reason,/No safe automatic assignment within cascade depth 1/);
+});
+test('US-016: a session held by the 3rd-ranked therapist resolves to the major', () => {
+  const state=initialState();
+  state.sessions.push(rankVisit('held-3','a-c1','a-t3','room-1'));
+  state.leaves.push(rankLeave('a-t3'));
+  const plan=boundedResolutionProposal(state,'a');
+  assert.deepEqual(moved(plan),new Map([['held-3','a-t1']]));
+  assert.equal(plan.unresolved.length,0);
+  // Major blocked and depth 0: the last alternative (2nd) is tried without cascade.
+  state.config.cascadeDepth=0;
+  state.clients.push({id:'a-c2',pod:'a',name:'Blocker',active:true,assigned:['a-t1']});
+  state.sessions.push(rankVisit('block-major','a-c2','a-t1','room-2'));
+  assert.deepEqual(moved(boundedResolutionProposal(state,'a')),new Map([['held-3','a-t2']]));
+});
+test('US-016: the cascade applies on the first alternative within the configured depth', () => {
+  const state=initialState();
+  state.clients.push({id:'a-c2',pod:'a',name:'Bumped',active:true,assigned:['a-t1','a-t3','a-t2']});
+  state.clients.push({id:'a-c3',pod:'a',name:'Third Blocker',active:true,assigned:['a-t3']});
+  state.sessions.push(rankVisit('held-2','a-c1','a-t2','room-1'),rankVisit('bump','a-c2','a-t1','room-2'),rankVisit('block-third','a-c3','a-t3','room-3'));
+  state.leaves.push(rankLeave('a-t2'));
+  state.config.cascadeDepth=0;
+  const none=boundedResolutionProposal(state,'a');
+  assert.equal(none.proposed.length,0);
+  assert.match(none.stops[0].reason,/cascade depth 0/);
+  // Depth 1: the major's clashing session is bumped to the client's 2nd therapist, freed by removing the 3rd blocker.
+  state.config.cascadeDepth=1;
+  state.sessions.pop();
+  state.clients.find((item)=>item.id==='a-c2').assigned=['a-t1','a-t3'];
+  const plan=boundedResolutionProposal(state,'a');
+  assert.deepEqual(moved(plan),new Map([['held-2','a-t1'],['bump','a-t3']]));
+  assert.equal(plan.proposed.find((item)=>item.change.sessionId==='bump').displacedBy,'held-2');
+  assert.equal(plan.unresolved.length,0);
+});
+const capReliefState=({chain})=>{
+  const state=initialState();
+  state.config.cascadeDepth=2;
+  state.therapists.find((item)=>item.id==='a-t2').capHours=2;
+  const client=(id,assigned)=>state.clients.push({id,pod:'a',name:id,active:true,assigned});
+  client('a-cE',['a-t2','a-t3']); client('a-cL',['a-t2','a-t3']); client('a-cX',['a-t3','a-t1']);
+  state.sessions.push(rankVisit('root','a-c1','a-t1','room-1'),
+    rankVisit(chain?'d-early':'a-early','a-cE','a-t2','room-4','2030-01-08'),
+    rankVisit(chain?'c-late':'b-late','a-cL','a-t2','room-2','2030-01-10'));
+  if (chain) state.sessions.push(rankVisit('x-blocker','a-cX','a-t3','room-3','2030-01-10'));
+  state.leaves.push(rankLeave('a-t1'));
+  return state;
+};
+test('CHANGE-003: cap relief prefers the candidate that moves with no further displacement', () => {
+  const state=capReliefState({chain:true});
+  const plan=boundedResolutionProposal(state,'a');
+  assert.deepEqual(moved(plan),new Map([['root','a-t2'],['d-early','a-t3']]));
+  assert.equal(plan.proposed.find((item)=>item.change.sessionId==='d-early').displacedBy,'root');
+  assert.equal(plan.unresolved.length,0);
+});
+test('CHANGE-003: with equal cost the latest session in the week is moved first, and runs are identical', () => {
+  const state=capReliefState({chain:false});
+  const plan=boundedResolutionProposal(state,'a');
+  assert.deepEqual(moved(plan),new Map([['root','a-t2'],['b-late','a-t3']]));
+  for (let run=0;run<3;run++) assert.deepEqual(boundedResolutionProposal(structuredClone(state),'a'),plan);
+});
+test('US-016: the last alternative never cascades, even when the blocking session could be displaced', () => {
+  for (const holder of ['a-t2','a-t1']) {
+    const state=initialState();
+    state.config.cascadeDepth=2;
+    state.therapists.push({id:'a-t4',pod:'a',name:'Free Synthetic',capHours:24,active:true});
+    const [firstAlt,lastAlt]=holder==='a-t2'?['a-t1','a-t3']:['a-t2','a-t3'];
+    // The first alternative is blocked by a session that cannot move; the last by one that could (its client has a free ranked therapist).
+    state.clients.push({id:'a-cF',pod:'a',name:'Fixed',active:true,assigned:[firstAlt]},{id:'a-cM',pod:'a',name:'Movable',active:true,assigned:[lastAlt,'a-t4']});
+    state.sessions.push(rankVisit('held','a-c1',holder,'room-1'),rankVisit('fixed','a-cF',firstAlt,'room-2'),rankVisit('movable','a-cM',lastAlt,'room-3'));
+    state.leaves.push(rankLeave(holder));
+    const plan=boundedResolutionProposal(state,'a');
+    assert.equal(plan.proposed.length,0,holder);
+    assert.equal(plan.allDraftChanges.length,0,holder);
+    assert.equal(plan.unresolved.length,1,holder);
+    assert.match(plan.stops[0].reason,/No safe automatic assignment within cascade depth 2/,holder);
+    assert.equal(state.sessions.find((item)=>item.id==='movable').therapist,lastAlt);
+  }
+});

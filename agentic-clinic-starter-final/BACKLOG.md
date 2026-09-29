@@ -787,7 +787,7 @@ Description: Extend the resolver to leave-affected sessions whose holder is not 
 Source / reason: D-B014; Discovery G1
 Acceptance criteria: The resolver tries the client's remaining ranked therapists in rank order, excluding the therapist on leave, under the same validity checks. The cascade applies only on the second-choice path, and the final fallback does not cascade. Stop reasons are explained. Tests cover a session held by the 2nd therapist and one held by the 3rd.
 Priority: P1
-Status: READY
+Status: DONE (2026-09-29). 58/58 tests pass. A QA differential over 4,800 states found the major-holder behaviour unchanged and no validity violations. QA also mutation-tested the new tests, and a no-cascade fallback test was added afterwards.
 Sprint: S7
 Dependencies: BUG-012
 Discovery class: BLOCKING
@@ -799,7 +799,7 @@ Description: Cap-relief displacement currently chooses by id order, which is eff
 Source / reason: D-B017; Discovery S2
 Acceptance criteria: Prefer the candidate whose own relocation needs the fewest further displacements; break ties by the latest in the week. Results are deterministic across runs. Covered by a test.
 Priority: P2
-Status: READY
+Status: DONE (2026-09-29). Implemented as iterative deepening: fewest displacements first, then latest start, then id. QA confirmed it is deterministic and bounded by depth.
 Sprint: S7
 Dependencies: BUG-012, US-016
 Discovery class: ADJACENT

@@ -367,7 +367,9 @@ export function boundedResolutionProposal(data,pod) {
       else if (extra.reason.startsWith('Weekly cap exceeded')) choices.push(...engine.weekPeers(session,Date.now()).map((item)=>({id:item.id,displacedBy:session.id})));
       else return null;
     }
-    return choices.filter((choice,index)=>!visited.has(choice.id)&&choices.findIndex((other)=>other.id===choice.id)===index).sort((a,b)=>a.id.localeCompare(b.id));
+    // D-B017: latest session first (later start), then id, so the order is fully deterministic. `search` layers "fewest further displacements" on top.
+    const startOf=(id)=>{ const at=interval(engine.session(id),engine.config)[0]; return Number.isFinite(at)?at:-Infinity; };
+    return choices.filter((choice,index)=>!visited.has(choice.id)&&choices.findIndex((other)=>other.id===choice.id)===index).map((choice)=>({...choice,start:startOf(choice.id)})).sort((a,b)=>b.start-a.start||(a.id<b.id?-1:a.id>b.id?1:0));
   };
   // The engine holds the trial state: a successful search leaves its moves applied, a failed one restores the state it was given.
   const search=(baseline,rootId,visited,remaining,links=[])=>{
@@ -377,7 +379,9 @@ export function boundedResolutionProposal(data,pod) {
     if (remaining===0) return null;
     const choices=blockers(extras,visited);
     if (!choices?.length) return null;
-    for (const {id,displacedBy} of choices) {
+    // D-B017: iterative deepening. Budget b lets a candidate's own relocation displace at most b further sessions, so every candidate that
+    // moves with no further displacement is tried before any that needs a chain, and so on; within a level the order is latest-first, then id.
+    for (let budget=0;budget<remaining;budget++) for (const {id,displacedBy} of choices) {
       if (id===rootId) continue;
       const session=engine.session(id);
       const client=engine.clients.get(session?.client);
@@ -387,7 +391,7 @@ export function boundedResolutionProposal(data,pod) {
         if (therapistId===session.therapist||!engine.candidate.therapists.some((item)=>item.id===therapistId&&item.active)) continue;
         const {undo}=engine.move(id,therapistId);
         const hasNewIssues=engine.extraIssues(baseline).length>0;
-        const result=hasNewIssues&&rank!==2?null:search(baseline,rootId,new Set([...visited,id]),remaining-1,[...links,{sessionId:id,displacedBy}]);
+        const result=hasNewIssues&&rank!==2?null:search(baseline,rootId,new Set([...visited,id]),budget,[...links,{sessionId:id,displacedBy}]);
         if (result) return result;
         undo();
       }
@@ -399,20 +403,26 @@ export function boundedResolutionProposal(data,pod) {
     if (!issue?.session||!issue.reasons.some((reason)=>reason.startsWith('Therapist leave:'))) continue;
     if (interval(issue.session,engine.config)[0] < Date.now()) { stops.push({sessionId:issue.sessionId,reason:'This session has already started; automatic changes to past sessions are not allowed.'}); continue; }
     const client=data.clients.find((item)=>item.id===issue.session.client);
-    if (client?.assigned[0]!==issue.session.therapist) { stops.push({sessionId:issue.sessionId,reason:'Automatic replacement currently supports a leave-affected first-ranked therapist; edit this session manually.'}); continue; }
+    const holder=issue.session.therapist;
+    if (!client||!client.assigned.includes(holder)) { stops.push({sessionId:issue.sessionId,reason:'This session\'s therapist is not one of the client\'s ranked therapists; edit this session manually.'}); continue; }
+    // D-B014: the client's other ranked therapists in rank order, never the one on leave. The first is tried with the bounded cascade,
+    // the last (when there is more than one) at the original time without cascading.
+    const alternatives=client.assigned.filter((id)=>id!==holder);
+    if (!alternatives.length) { stops.push({sessionId:issue.sessionId,reason:'This client has no other ranked therapist to take the session; manual edit or cancellation remains available.'}); continue; }
     const baseline=engine.baseline();
     const before=new Map(changes.map((item)=>[item.sessionId,JSON.stringify(item)]));
     const mark=engine.log.length;
     let solved=null;
-    const second=client.assigned[1];
-    if (data.therapists.some((item)=>item.id===second&&item.active)) {
-      const {undo}=engine.move(issue.sessionId,second);
+    const first=alternatives[0];
+    if (data.therapists.some((item)=>item.id===first&&item.active)) {
+      const {undo}=engine.move(issue.sessionId,first);
       solved=search(baseline,issue.sessionId,new Set([issue.sessionId]),maxDepth);
       if (!solved) undo();
     }
-    if (!solved) {
-      const third=engine.workable(issue.sessionId).find((item)=>item.rank===3);
-      if (third) { engine.move(issue.sessionId,third.therapist); solved={links:[]}; }
+    if (!solved&&alternatives.length>1) {
+      const last=alternatives[alternatives.length-1];
+      const fallback=engine.workable(issue.sessionId).find((item)=>item.therapist===last);
+      if (fallback) { engine.move(issue.sessionId,fallback.therapist); solved={links:[]}; }
     }
     if (!solved) { stops.push({sessionId:issue.sessionId,reason:`No safe automatic assignment within cascade depth ${maxDepth}; manual edit or cancellation remains available.`}); continue; }
     for (const move of engine.log.slice(mark)) changes=stageChange(changes,move.sessionId,move.therapist);
