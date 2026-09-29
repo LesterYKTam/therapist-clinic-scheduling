@@ -118,6 +118,8 @@ export class PostgresClinicStore {
   createNotificationTasks(state,beforeSessions,afterSessions) {
     const before=new Map(beforeSessions.map((session)=>[session.id,session]));
     const after=new Map(afterSessions.map((session)=>[session.id,session]));
+    const groups=new Map();
+    const details=(session)=>session?{date:session.date,time:session.time,minutes:session.minutes,location:session.location,room:session.room,roomName:session.location==='clinic'?state.rooms.find((room)=>room.id===session.room)?.name||session.room:null,client:session.client,therapist:session.therapist}:null;
     for (const id of new Set([...before.keys(),...after.keys()])) {
       const old=before.get(id), next=after.get(id);
       if (JSON.stringify(old)===JSON.stringify(next)) continue;
@@ -126,10 +128,15 @@ export class PostgresClinicStore {
       const recipients=new Map();
       recipients.set(`client:${owner.id}`,{recipientRole:'client',recipientId:owner.id});
       for (const session of [old,next]) if (session) recipients.set(`therapist:${session.therapist}`,{recipientRole:'therapist',recipientId:session.therapist});
-      const changeType=!old?'added':!next?'cancelled':'changed';
-      const details=(session)=>session?{date:session.date,time:session.time,minutes:session.minutes,location:session.location,room:session.room,roomName:session.location==='clinic'?state.rooms.find((room)=>room.id===session.room)?.name||session.room:null,client:session.client,therapist:session.therapist}:null;
-      for (const recipient of recipients.values()) state.notifications.push({id:uid('notification'),pod:owner.pod,sessionId:id,changeType,...recipient,before:details(old),after:details(next),status:'pending',createdAt:new Date().toISOString()});
+      const item={sessionId:id,changeType:!old?'added':!next?'cancelled':'changed',before:details(old),after:details(next)};
+      // D-B016: one task per person per commit; key on pod too for safety.
+      for (const [key,recipient] of recipients) {
+        const groupKey=`${owner.pod}|${key}`;
+        if (!groups.has(groupKey)) groups.set(groupKey,{id:uid('notification'),pod:owner.pod,...recipient,items:[],status:'pending',createdAt:new Date().toISOString()});
+        groups.get(groupKey).items.push(item);
+      }
     }
+    state.notifications.push(...groups.values());
   }
 
   rejectNewLeaveConflicts(state, before) {

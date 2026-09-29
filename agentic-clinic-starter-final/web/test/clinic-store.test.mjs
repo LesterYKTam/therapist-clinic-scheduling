@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import pg from 'pg';
 import { PostgresClinicStore } from '../lib/clinic-store.mjs';
-import { initialState, leaveConflicts, withConflicts, draftIssues, workableAssignments, directResolutionProposal, boundedResolutionProposal } from '../lib/scheduling.mjs';
+import { initialState, leaveConflicts, withConflicts, draftIssues, notificationItems, workableAssignments, directResolutionProposal, boundedResolutionProposal } from '../lib/scheduling.mjs';
 import { reportPdfResponse } from '../lib/report-response.mjs';
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
 
@@ -289,7 +289,9 @@ test('two staff leaves produce one batch proposal and one atomic schedule commit
     assert.equal(state.sessions.find((item)=>item.id==='leave-visit-1').therapist,'a-t2');
     assert.equal(state.sessions.find((item)=>item.id==='leave-visit-2').therapist,'a-t3');
     assert.equal(state.leaves.length,2);
-    assert.equal(state.notifications.length,6);
+    // D-B016: 2 clients + therapists a-t1, a-t2 (in both sessions), a-t3, one task per person.
+    assert.equal(state.notifications.length,5);
+    assert.equal(state.notifications.find((item)=>item.recipientId==='a-t2').items.length,2);
   } finally { await store.close(); }
 });
 test('an admin can revise applied Auto resolve changes before one final commit', async () => {
@@ -378,26 +380,29 @@ test('draft Add session supports one-off and weekly bookings without publishing 
     state=await store.read();
     assert.equal(state.sessions.length,4);
     assert.equal(state.series.length,1);
-    assert.equal(state.notifications.length,8);
-    assert.equal(state.notifications.filter((item)=>item.recipientRole==='client').length,4);
+    // D-B016: one client task listing all 4 sessions, plus one task each for a-t1 (3 sessions) and a-t2 (1 session).
+    assert.equal(state.notifications.length,3);
+    assert.equal(state.notifications.filter((item)=>item.recipientRole==='client').length,1);
     assert.ok(state.notifications.every((item)=>item.status==='pending'));
-    const task=state.notifications.find((item)=>item.sessionId===newId&&item.recipientRole==='client');
-    assert.equal(task.before,null);
-    assert.equal(task.after.time,'11:00');
-    assert.equal(task.after.minutes,90);
+    const task=state.notifications.find((item)=>item.recipientRole==='client');
+    assert.equal(task.items.length,4);
+    const newItem=task.items.find((item)=>item.sessionId===newId);
+    assert.equal(newItem.before,null);
+    assert.equal(newItem.after.time,'11:00');
+    assert.equal(newItem.after.minutes,90);
     await assert.rejects(()=>store.handleNotification('b',task.id,state.revision),/not found/);
     await store.handleNotification('a',task.id,state.revision);
     state=await store.read();
     assert.equal(state.notifications.find((item)=>item.id===task.id).status,'handled');
     assert.ok(state.notifications.find((item)=>item.id===task.id).handledAt);
     await assert.rejects(()=>store.handleNotification('a',task.id,state.revision),/already been handled/);
-    const clinicTask=state.notifications.find((item)=>item.after?.room==='room-2');
-    assert.equal(clinicTask.after.roomName,'Room 2');
+    const clinicTask=state.notifications.find((item)=>item.recipientRole==='client');
+    assert.equal(clinicTask.items.find((item)=>item.after?.room==='room-2').after.roomName,'Room 2');
     const renamed=structuredClone(state);
     renamed.rooms.find((item)=>item.id==='room-2').name='Room 2A';
     await store.updateSetup(renamed,state.revision);
     state=await store.read();
-    assert.equal(state.notifications.find((item)=>item.id===clinicTask.id).after.roomName,'Room 2');
+    assert.equal(state.notifications.find((item)=>item.id===clinicTask.id).items.find((item)=>item.after?.room==='room-2').after.roomName,'Room 2');
     assert.equal(state.sessions.find((item)=>item.id===newId).minutes,90);
     assert.equal(state.drafts.length,0);
   } finally { await store.close(); }
@@ -476,9 +481,9 @@ test('draft conflicts block commit, while cancellation or discard leave committe
     await store.stageDraftChange('a',{kind:'cancel',sessionId:original.id},state.revision);
     state=await store.read(); await store.commitDraft('a',state.revision);
     state=await store.read(); assert.equal(state.sessions.length,1); assert.equal(leaveConflicts(state).length,0); assert.equal(state.leaves.length,1);
-    const cancelled=state.notifications.filter((item)=>item.sessionId===original.id&&item.changeType==='cancelled');
+    const cancelled=state.notifications.filter((item)=>item.items.some((entry)=>entry.sessionId===original.id&&entry.changeType==='cancelled'));
     assert.equal(cancelled.length,2);
-    assert.ok(cancelled.every((item)=>item.before?.date==='2030-01-07'&&item.after===null));
+    assert.ok(cancelled.every((item)=>item.items.every((entry)=>entry.before?.date==='2030-01-07'&&entry.after===null)));
   } finally { await store.close(); }
 });
 
@@ -1061,5 +1066,71 @@ test('D-B008: the committed conflict indicator stays truthful while a draft fix 
     await store.commitDraft('a',state.revision);
     state=await store.read();
     assert.equal(withConflicts(state).conflicts.length,0);
+  } finally { await store.close(); }
+});
+
+test('CHANGE-004: one task per person per commit lists every session, and handling covers the group', async () => {
+  await clean(); const store=await open();
+  try {
+    let state=await store.read();
+    await store.commit(weekly({endDate:'2030-01-14'}),state.revision);
+    state=await store.read();
+    assert.equal(state.sessions.length,2);
+    assert.equal(state.notifications.length,2);
+    const client=state.notifications.find((item)=>item.recipientRole==='client');
+    const therapist=state.notifications.find((item)=>item.recipientRole==='therapist');
+    assert.equal(client.recipientId,'a-c1'); assert.equal(therapist.recipientId,'a-t1');
+    for (const task of [client,therapist]) {
+      assert.equal(task.items.length,2);
+      assert.deepEqual(task.items.map((item)=>item.sessionId).sort(),state.sessions.map((item)=>item.id).sort());
+      assert.ok(task.items.every((item)=>item.changeType==='added'&&item.before===null&&item.after.roomName==='Room 1'));
+    }
+    await store.handleNotification('a',client.id,state.revision);
+    state=await store.read();
+    assert.equal(state.notifications.find((item)=>item.id===client.id).status,'handled');
+    assert.equal(state.notifications.find((item)=>item.id===therapist.id).status,'pending');
+    assert.equal(state.notifications.find((item)=>item.id===client.id).items.length,2);
+  } finally { await store.close(); }
+});
+test('CHANGE-004: different therapists get separate therapist tasks; the client still gets one', async () => {
+  await clean(); const store=await open();
+  try {
+    let state=await store.read();
+    await store.commit(oneOff(),state.revision);
+    state=await store.read();
+    await store.commit(oneOff({therapist:'a-t2',room:'room-2',time:'11:00'}),state.revision);
+    state=await store.read();
+    assert.equal(state.notifications.length,4); // two separate commits: (client, t1) and (client, t2)
+    await store.beginDraft('a',state.revision);
+    state=await store.read();
+    for (const session of state.sessions) await store.stageDraftChange('a',{kind:'cancel',sessionId:session.id},(await store.read()).revision);
+    const beforeCount=(await store.read()).notifications.length;
+    state=await store.read();
+    await store.commitDraft('a',state.revision);
+    state=await store.read();
+    const fresh=state.notifications.slice(beforeCount);
+    assert.equal(fresh.length,3);
+    assert.equal(fresh.filter((item)=>item.recipientRole==='client').length,1);
+    assert.equal(fresh.find((item)=>item.recipientRole==='client').items.length,2);
+    assert.deepEqual(fresh.filter((item)=>item.recipientRole==='therapist').map((item)=>[item.recipientId,item.items.length]).sort(),[['a-t1',1],['a-t2',1]]);
+  } finally { await store.close(); }
+});
+test('CHANGE-004: old-shape per-session tasks still validate, read and handle', async () => {
+  await clean();
+  const seed=initialState();
+  seed.notifications.push({id:'old-task',pod:'a',sessionId:'old-session',changeType:'cancelled',recipientRole:'client',recipientId:'a-c1',before:{date:'2030-01-07',time:'09:00',minutes:60,location:'home',room:null,roomName:null,client:'a-c1',therapist:'a-t1'},after:null,status:'pending',createdAt:'2030-01-01T00:00:00.000Z'});
+  const store=await open(seed);
+  try {
+    let state=await store.read();
+    assert.equal(state.notifications.length,1);
+    assert.equal(notificationItems(state.notifications[0]).length,1);
+    assert.equal(notificationItems(state.notifications[0])[0].sessionId,'old-session');
+    await store.commit(oneOff(),state.revision);
+    state=await store.read();
+    assert.equal(state.notifications.length,3);
+    await store.handleNotification('a','old-task',state.revision);
+    state=await store.read();
+    assert.equal(state.notifications.find((item)=>item.id==='old-task').status,'handled');
+    assert.equal(state.notifications.filter((item)=>item.status==='pending').length,2);
   } finally { await store.close(); }
 });

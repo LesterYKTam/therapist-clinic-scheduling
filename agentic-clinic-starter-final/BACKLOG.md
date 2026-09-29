@@ -835,7 +835,7 @@ Description: A commit creates one notification task per affected person, listing
 Source / reason: D-B016
 Acceptance criteria: One task per person per commit, containing before and after details for each affected session. Marking the task handled covers all its sessions. Existing tasks remain readable.
 Priority: P2
-Status: READY
+Status: DONE (2026-09-29). 71/71 tests pass. QA confirmed by code review that no notification is lost or duplicated and that old per-session tasks stay readable.
 Sprint: S7
 Dependencies: BUG-012
 Discovery class: ADJACENT

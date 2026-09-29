@@ -493,6 +493,12 @@ const active = (items, id) => items.find(x => x.id === id && x.active);
 export const isPast = (date, nowDate = todayInZone('America/Toronto')) => date < nowDate;
 export function todayInZone(zone) { return formatted(Date.now(), zone).date; }
 
+/** Session changes in a notification task: grouped tasks list `items`; old per-session tasks read as one item. */
+export function notificationItems(task) {
+  if (Array.isArray(task.items)) return task.items;
+  return task.sessionId?[{sessionId:task.sessionId,changeType:task.changeType,before:task.before,after:task.after}]:[];
+}
+
 export function validateState(data, {allowHistoric = true} = {}) {
   if (!data || data.schema !== 2 || !Number.isInteger(data.revision) || data.revision < 0) throw new ClinicRuleError('Unsupported clinic data.');
   const c = data.config;
@@ -506,8 +512,10 @@ export function validateState(data, {allowHistoric = true} = {}) {
   data.notifications ??= []; // Existing S4 snapshots predate the notification worklist.
   for (const key of ['pods','therapists','clients','rooms','series','sessions','leaves','drafts','notifications']) if (!Array.isArray(data[key]) || new Set(data[key].map(x => x.id)).size !== data[key].length) throw new ClinicRuleError(`Invalid or duplicate ${key} records.`);
   for (const task of data.notifications) {
-    if (!task.id || !task.sessionId || !['client','therapist'].includes(task.recipientRole) || !['pending','handled'].includes(task.status) || !['added','changed','cancelled'].includes(task.changeType) || !data.pods.some((pod)=>pod.id===task.pod) || !data[task.recipientRole==='client'?'clients':'therapists'].some((person)=>person.id===task.recipientId&&person.pod===task.pod)) throw new ClinicRuleError('Invalid notification task.');
-    for (const snapshot of [task.before,task.after]) if (snapshot!==undefined&&snapshot!==null&&(!snapshot.date||!snapshot.time||!Number.isInteger(snapshot.minutes)||!snapshot.client||!snapshot.therapist||!['clinic','home'].includes(snapshot.location))) throw new ClinicRuleError('Invalid notification session details.');
+    // Old per-session tasks carry one session inline; grouped tasks (D-B016) carry `items`.
+    const items=notificationItems(task);
+    if (!task.id || !items.length || items.some((item)=>!item.sessionId||!['added','changed','cancelled'].includes(item.changeType)) || !['client','therapist'].includes(task.recipientRole) || !['pending','handled'].includes(task.status) || !data.pods.some((pod)=>pod.id===task.pod) || !data[task.recipientRole==='client'?'clients':'therapists'].some((person)=>person.id===task.recipientId&&person.pod===task.pod)) throw new ClinicRuleError('Invalid notification task.');
+    for (const item of items) for (const snapshot of [item.before,item.after]) if (snapshot!==undefined&&snapshot!==null&&(!snapshot.date||!snapshot.time||!Number.isInteger(snapshot.minutes)||!snapshot.client||!snapshot.therapist||!['clinic','home'].includes(snapshot.location))) throw new ClinicRuleError('Invalid notification session details.');
   }
   if (new Set(data.drafts.map((draft) => draft.pod)).size !== data.drafts.length) throw new ClinicRuleError('Only one shared schedule draft is allowed per pod.');
   for (const draft of data.drafts) {
