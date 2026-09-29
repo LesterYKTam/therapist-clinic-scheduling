@@ -727,7 +727,7 @@ Description: validateState and draftIssues compare every session with every othe
 Source / reason: QA structural review, 2026-09-28; owner question D-P045
 Acceptance criteria: Business behaviour unchanged, with every existing test passing unmodified. Overlap checks use per-therapist, per-client and per-room sorted buckets (or an equivalent), not all-pairs comparison. Validation checks future sessions plus touched ones; history cannot create new violations. Workable options are computed only for issue sessions, on demand. A repeatable scale test with 5 pods, 30 therapists, 100 clients, 15 rooms, 2,400 future sessions and one year of history meets: page state build under 1 s, full validation under 500 ms, and Auto resolve for a two-week leave affecting about 12 sessions under 5 s.
 Priority: P0
-Status: READY
+Status: DONE (2026-09-29). All 43 web tests pass, including the new scale test, and the build passes. QA's independent differential over about 1,100 randomised cases found no behaviour change. At 2,400 sessions, validation takes about 35 ms and Auto resolve about 16 ms; at 12,800 sessions the page build takes about 39 ms. PM amendment: history is still validated, because it costs about 100 ms and preserves the existing past-overlap rule.
 Sprint: S7
 Dependencies: none
 Discovery class: BLOCKING
@@ -868,4 +868,28 @@ Priority: P2
 Status: BACKLOG
 Sprint: post-M3
 Dependencies: M3 review
+Discovery class: ADJACENT
+
+### BUG-017
+Type: BUG
+Title: Pod view redaction matches id substrings, not whole ids
+Description: podView masks other pods' session ids and names inside text by substring match. A short foreign id (for example "s1") can also mask part of an own-pod id or text (for example "s10808"). Real ids are UUID-based, so production collisions are unlikely, but seed and demo ids are short. The pre-existing behaviour was kept unchanged by the BUG-012 rewrite.
+Source / reason: Developer note during BUG-012
+Acceptance criteria: Redaction matches whole id and name tokens only. Own-pod text and ids are never altered. Foreign ids and names are still masked. Covered by a test that uses short, colliding ids.
+Priority: P3
+Status: READY
+Sprint: S7
+Dependencies: BUG-012
+Discovery class: TANGENTIAL
+
+### BUG-018
+Type: BUG
+Title: Draft-added sessions get no server-computed options
+Description: podView builds workableOptions only from committed pod sessions. A draft-added session whose issue is a room overlap with another pod's booking gets no served options, so the browser falls back to computing from the pod-only view. That view cannot see the other pod's booking, so it offers therapists who cannot clear the room clash. The flaw predates the BUG-012 rewrite and is not a regression.
+Source / reason: QA verification of BUG-012 (repro: pod a draft-adds a session in room-1 overlapping pod b's booking)
+Acceptance criteria: Served options cover every issue session in the pod's draft, including draft-added ones. Options for such a session match a full-state computation. Covered by a test.
+Priority: P2
+Status: READY
+Sprint: S7
+Dependencies: BUG-012
 Discovery class: ADJACENT

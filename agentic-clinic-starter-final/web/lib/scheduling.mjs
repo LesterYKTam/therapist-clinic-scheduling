@@ -30,6 +30,8 @@ const minutesAt = value => {
 };
 const formatters = new Map();
 const localCache = new Map();
+const validZones = new Set();
+const weekKeyCache = new Map();
 const formatted = (ms, zone) => {
   let formatter=formatters.get(zone);
   if (!formatter) { formatter=new Intl.DateTimeFormat('en-CA', {timeZone:zone, year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}); formatters.set(zone,formatter); }
@@ -40,13 +42,19 @@ const formatted = (ms, zone) => {
 
 /** Convert a wall-clock appointment to an instant, rejecting spring DST gaps. Ambiguous fall times choose the earlier instant. */
 export function localInstant(date, time, zone) {
-  parseDate(date); minutesAt(time);
   const cacheKey=`${zone}|${date}|${time}`; if (localCache.has(cacheKey)) return localCache.get(cacheKey);
-  try { new Intl.DateTimeFormat('en', {timeZone:zone}).format(); } catch { throw new Error('Configured timezone is invalid.'); }
+  parseDate(date); minutesAt(time);
+  if (!validZones.has(zone)) { try { new Intl.DateTimeFormat('en', {timeZone:zone}).format(); } catch { throw new Error('Configured timezone is invalid.'); } validZones.add(zone); }
   const base = Date.parse(`${date}T${time}:00Z`);
+  // Only the zone offsets in force within +/-14 h of the wall time can produce this wall time, so sample those (a handful of
+  // formatter calls) instead of probing every 15-minute offset. Ambiguous fall times still choose the earlier instant.
+  const offsets = new Set();
+  for (const probe of [base - 14 * 3600000, base, base + 14 * 3600000]) {
+    const wall = formatted(probe, zone); offsets.add(Date.parse(`${wall.date}T${wall.time}:00Z`) - probe);
+  }
   const candidates = [];
-  for (let offset = -14 * 60; offset <= 14 * 60; offset += 15) {
-    const candidate = base - offset * 60000;
+  for (const offset of offsets) {
+    const candidate = base - offset;
     const actual = formatted(candidate, zone);
     if (actual.date === date && actual.time === time) candidates.push(candidate);
   }
@@ -66,199 +74,361 @@ export function leaveInterval(leave, config) {
 }
 export function leaveConflicts(data) {
   const leaves = data.leaves || [];
+  if (!leaves.length) return [];
+  const byTherapist = new Map(); // leave intervals are computed once per therapist, not once per session
+  const forTherapist = (therapist) => {
+    let list = byTherapist.get(therapist);
+    if (!list) { list = leaves.filter((leave) => leave.therapist === therapist).map((leave) => ({ leave, span: leaveInterval(leave, data.config) })); byTherapist.set(therapist, list); }
+    return list;
+  };
   return data.sessions.flatMap((session) => {
     const [start, end] = interval(session, data.config);
-    const causes = leaves.filter((leave) => {
-      if (leave.therapist !== session.therapist) return false;
-      const [leaveStart, leaveEnd] = leaveInterval(leave, data.config);
-      return start < leaveEnd && leaveStart < end;
-    });
+    const causes = forTherapist(session.therapist).filter(({ span }) => start < span[1] && span[0] < end).map(({ leave }) => leave);
     return causes.length ? [{ sessionId: session.id, session, leaveIds: causes.map((leave) => leave.id), leaves: causes }] : [];
   });
 }
+
+/** Committed sessions with the pod's draft applied. Shares unchanged records with `data`; only touched sessions are copied. */
 export function draftCandidate(data, pod) {
-  const candidate = structuredClone(data);
   const draft = data.drafts?.find((item) => item.pod === pod);
+  const candidate = { ...data, sessions: data.sessions.slice(), series: data.series.slice() };
   const stale = [];
-  for (const change of draft?.changes || []) {
+  const changes = draft?.changes || [];
+  if (!changes.length) return { candidate, stale };
+  const byId = new Map(); for (const session of candidate.sessions) if (!byId.has(session.id)) byId.set(session.id, session);
+  const clientPod = new Map(); for (const client of candidate.clients) if (!clientPod.has(client.id)) clientPod.set(client.id, client.pod);
+  const replace = (from, to) => { candidate.sessions[candidate.sessions.indexOf(from)] = to; byId.set(to.id, to); };
+  for (const change of changes) {
     if (change.kind === 'add') {
       if (change.series && !candidate.series.some((item)=>item.id===change.series.id)) candidate.series.push(structuredClone(change.series));
-      candidate.sessions.push(structuredClone(change.session));
+      const added = structuredClone(change.session);
+      candidate.sessions.push(added); if (!byId.has(added.id)) byId.set(added.id, added);
       continue;
     }
-    const session = candidate.sessions.find((item) => item.id === change.sessionId);
-    if (!session || candidate.clients.find((item) => item.id === session.client)?.pod !== pod) {
+    const session = byId.get(change.sessionId);
+    if (!session || clientPod.get(session.client) !== pod) {
       stale.push(change.sessionId);
       continue;
     }
-    if (change.kind === 'cancel') candidate.sessions = candidate.sessions.filter((item) => item.id !== change.sessionId);
-    else if (change.kind === 'assign') session.therapist = change.therapist;
-    else if (change.kind === 'reschedule') Object.assign(session, {therapist:change.therapist,date:change.date,time:change.time,minutes:change.minutes,location:change.location,room:change.room});
+    if (change.kind === 'cancel') { candidate.sessions.splice(candidate.sessions.indexOf(session), 1); byId.delete(session.id); }
+    else if (change.kind === 'assign') replace(session, { ...session, therapist: change.therapist });
+    else if (change.kind === 'reschedule') replace(session, Object.assign({ ...session }, {therapist:change.therapist,date:change.date,time:change.time,minutes:change.minutes,location:change.location,room:change.room}));
   }
   return { candidate, stale };
 }
 
-export function draftIssues(data, pod) {
-  const { candidate, stale } = draftCandidate(data, pod);
-  const inPod = (session) => candidate.clients.find((item) => item.id === session.client)?.pod === pod;
-  const issues = new Map();
-  const add = (session, reason) => {
-    if (!inPod(session)) return;
-    const entry = issues.get(session.id) || { sessionId: session.id, session, reasons: [] };
-    if (!entry.reasons.includes(reason)) entry.reasons.push(reason);
-    issues.set(session.id, entry);
-  };
-  for (const id of stale) issues.set(id, { sessionId: id, session: null, reasons: ['The original session changed or was removed. Recheck this draft.'] });
-  for (const {session, leaves} of leaveConflicts(candidate)) add(session, `Therapist leave: ${leaves.map((leave) => `${leave.startDate} ${leave.startTime}–${leave.endDate} ${leave.endTime}`).join('; ')}`);
-  for (let index=0; index<candidate.sessions.length; index++) {
-    const session=candidate.sessions[index];
-    try { validateSessionShape(candidate,session); } catch (error) { add(session,error.message); }
-    for (const other of candidate.sessions.slice(index+1)) {
-      if (!overlaps(session,other,candidate.config)) continue;
-      if (session.therapist===other.therapist) { add(session,`Therapist overlaps session ${other.id}.`); add(other,`Therapist overlaps session ${session.id}.`); }
-      if (session.client===other.client) { add(session,`Client overlaps session ${other.id}.`); add(other,`Client overlaps session ${session.id}.`); }
-      if (session.location==='clinic'&&other.location==='clinic'&&session.room===other.room) { add(session,`Room overlaps session ${other.id}.`); add(other,`Room overlaps session ${session.id}.`); }
+const sortKey = (session) => `${session.date||''}T${session.time||''}:${session.id}`;
+const byIdMap = (items) => { const map = new Map(); for (const item of items) if (!map.has(item.id)) map.set(item.id, item); return map; };
+const shapeLookups = (data) => {
+  const clients = byIdMap(data.clients), therapists = byIdMap(data.therapists), rooms = byIdMap(data.rooms), series = new Set(data.series.map((item) => item.id));
+  return { client: (id) => clients.get(id), therapist: (id) => therapists.get(id), room: (id) => rooms.get(id), series: (id) => series.has(id) };
+};
+
+/**
+ * Indexed view of one pod's draft candidate. Sessions sit in per-therapist, per-client and per-room buckets sorted by start, so an
+ * overlap query touches only neighbours, and each in-pod session keeps its issue reasons. `move` reassigns one session's therapist and
+ * re-evaluates only the sessions it can affect (itself, its overlap neighbours, its old and new therapist-weeks); `undo` reverts it.
+ */
+class DraftEngine {
+  constructor(data, pod) {
+    const { candidate, stale } = draftCandidate(data, pod);
+    this.pod = pod; this.candidate = candidate; this.config = candidate.config;
+    this.lookups = shapeLookups(candidate);
+    this.clients = byIdMap(candidate.clients); this.therapists = byIdMap(candidate.therapists);
+    this.leaves = candidate.leaves || []; this.leaveCache = new Map();
+    this.staleEntries = stale.map((id) => ({ sessionId: id, session: null, reasons: ['The original session changed or was removed. Recheck this draft.'] }));
+    this.entries = []; this.byId = new Map();
+    this.buckets = { therapist: new Map(), client: new Map(), room: new Map() };
+    this.weeks = new Map(); // therapist -> week -> { minutes, entries }
+    this.issueEntries = new Set(); this.log = [];
+    candidate.sessions.forEach((session, index) => {
+      const [start, end] = interval(session, this.config);
+      const entry = { s: session, i: index, start, end, indexed: Number.isFinite(start) && Number.isFinite(end), week: weekKey(session.date, this.config.weekStart), inPod: this.clients.get(session.client)?.pod === pod, reasons: null };
+      this.entries.push(entry); if (!this.byId.has(session.id)) this.byId.set(session.id, entry);
+      if (entry.indexed) {
+        this.bucketOf('therapist', session.therapist, true).list.push(entry);
+        this.bucketOf('client', session.client, true).list.push(entry);
+        if (session.location === 'clinic') this.bucketOf('room', session.room, true).list.push(entry);
+      }
+      this.weekOf(session.therapist, entry.week).add(entry, session.minutes);
+    });
+    for (const map of Object.values(this.buckets)) for (const bucket of map.values()) {
+      bucket.list.sort((a, b) => a.start - b.start || a.i - b.i);
+      for (const entry of bucket.list) bucket.maxLength = Math.max(bucket.maxLength, entry.end - entry.start);
     }
+    for (const entry of this.entries) if (entry.inPod) this.setReasons(entry, this.reasonsOf(entry));
   }
-  const loads=new Map();
-  for (const session of candidate.sessions) { const key=`${session.therapist}:${weekKey(session.date,candidate.config.weekStart)}`; loads.set(key,(loads.get(key)||0)+session.minutes); }
-  for (const session of candidate.sessions) { const key=`${session.therapist}:${weekKey(session.date,candidate.config.weekStart)}`; const therapist=candidate.therapists.find((item)=>item.id===session.therapist); if (therapist&&loads.get(key)>therapist.capHours*60) add(session,`Weekly cap exceeded for ${therapist.name}.`); }
-  return [...issues.values()].sort((a,b)=>`${a.session?.date||''}T${a.session?.time||''}:${a.sessionId}`.localeCompare(`${b.session?.date||''}T${b.session?.time||''}:${b.sessionId}`));
+  bucketOf(kind, key, create) {
+    let bucket = this.buckets[kind].get(key);
+    if (!bucket && create) { bucket = { list: [], maxLength: 0 }; this.buckets[kind].set(key, bucket); }
+    return bucket;
+  }
+  weekOf(therapist, week) {
+    let weeks = this.weeks.get(therapist); if (!weeks) { weeks = new Map(); this.weeks.set(therapist, weeks); }
+    let slot = weeks.get(week);
+    if (!slot) { slot = { minutes: 0, entries: new Set(), add(entry, minutes) { this.entries.add(entry); this.minutes += minutes; }, remove(entry, minutes) { this.entries.delete(entry); this.minutes -= minutes; } }; weeks.set(week, slot); }
+    return slot;
+  }
+  /** Entries in the bucket that overlap `entry` (excluding itself), found by binary search on start. */
+  overlapping(bucket, entry) {
+    const found = [];
+    if (!bucket || !entry.indexed) return found;
+    const list = bucket.list, floor = entry.start - bucket.maxLength;
+    let lo = 0, hi = list.length;
+    while (lo < hi) { const mid = (lo + hi) >> 1; if (list[mid].start <= floor) lo = mid + 1; else hi = mid; }
+    for (let at = lo; at < list.length && list[at].start < entry.end; at++) {
+      const other = list[at];
+      if (other !== entry && entry.start < other.end) found.push(other);
+    }
+    return found;
+  }
+  neighbours(entry) {
+    const flags = new Map();
+    const flag = (other, kind) => { const item = flags.get(other) || { other, therapist: false, client: false, room: false }; item[kind] = true; flags.set(other, item); };
+    const s = entry.s;
+    for (const other of this.overlapping(this.bucketOf('therapist', s.therapist), entry)) flag(other, 'therapist');
+    for (const other of this.overlapping(this.bucketOf('client', s.client), entry)) flag(other, 'client');
+    if (s.location === 'clinic') for (const other of this.overlapping(this.bucketOf('room', s.room), entry)) flag(other, 'room');
+    return [...flags.values()].sort((a, b) => a.other.i - b.other.i);
+  }
+  leaveSpans(therapist) {
+    let spans = this.leaveCache.get(therapist);
+    if (!spans) { spans = this.leaves.filter((leave) => leave.therapist === therapist).map((leave) => ({ leave, span: leaveInterval(leave, this.config) })); this.leaveCache.set(therapist, spans); }
+    return spans;
+  }
+  /** Reasons in the order the original all-pairs scan produced: leave, earlier neighbours, own shape, later neighbours, cap. */
+  reasonsOf(entry) {
+    const s = entry.s, reasons = [];
+    const add = (reason) => { if (!reasons.includes(reason)) reasons.push(reason); };
+    const causes = this.leaveSpans(s.therapist).filter(({ span }) => entry.start < span[1] && span[0] < entry.end).map(({ leave }) => leave);
+    if (causes.length) add(`Therapist leave: ${causes.map((leave) => `${leave.startDate} ${leave.startTime}–${leave.endDate} ${leave.endTime}`).join('; ')}`);
+    const neighbours = this.neighbours(entry);
+    const pair = ({ other, therapist, client, room }) => {
+      if (therapist) add(`Therapist overlaps session ${other.s.id}.`);
+      if (client) add(`Client overlaps session ${other.s.id}.`);
+      if (room) add(`Room overlaps session ${other.s.id}.`);
+    };
+    for (const item of neighbours) if (item.other.i < entry.i) pair(item);
+    try { validateSessionShape(this.candidate, s, { lookups: this.lookups }); } catch (error) { add(error.message); }
+    for (const item of neighbours) if (item.other.i > entry.i) pair(item);
+    const therapist = this.therapists.get(s.therapist);
+    if (therapist && this.weekOf(s.therapist, entry.week).minutes > therapist.capHours * 60) add(`Weekly cap exceeded for ${therapist.name}.`);
+    return reasons;
+  }
+  setReasons(entry, reasons) {
+    entry.reasons = reasons.length ? reasons : null;
+    if (entry.reasons) this.issueEntries.add(entry); else this.issueEntries.delete(entry);
+  }
+  entryFor(entry) {
+    const stale = this.staleEntries.find((item) => item.sessionId === entry.s.id);
+    const merged = stale ? { ...stale, reasons: [...stale.reasons] } : { sessionId: entry.s.id, session: { ...entry.s }, reasons: [] };
+    for (const reason of entry.reasons) if (!merged.reasons.includes(reason)) merged.reasons.push(reason);
+    return merged;
+  }
+  issues() {
+    const out = new Map(this.staleEntries.map((item) => [item.sessionId, item]));
+    for (const entry of this.issueEntries) out.set(entry.s.id, this.entryFor(entry));
+    return [...out.values()].sort((a,b)=>sortKey(a.session||{id:a.sessionId}).localeCompare(sortKey(b.session||{id:b.sessionId})));
+  }
+  issue(sessionId) {
+    const entry = this.byId.get(sessionId);
+    if (entry?.reasons) return this.entryFor(entry);
+    return this.staleEntries.find((item) => item.sessionId === sessionId);
+  }
+  /** Reason sets keyed by session id, the baseline for "no new problem" checks. */
+  baseline() { return new Map(this.issues().map((item) => [item.sessionId, new Set(item.reasons)])); }
+  /** In-pod issue reasons that are not in the baseline. Stale-draft entries never change while therapists move. */
+  extraIssues(baseline) {
+    const fresh = [];
+    for (const entry of this.issueEntries) { const reasons = entry.reasons.filter((reason) => !baseline.get(entry.s.id)?.has(reason)); if (reasons.length) fresh.push({ entry, reasons }); }
+    if (fresh.length > 1) fresh.sort((x, y) => sortKey(x.entry.s).localeCompare(sortKey(y.entry.s))); // same order as issues()
+    return fresh.flatMap(({ entry, reasons }) => reasons.map((reason) => ({ sessionId: entry.s.id, reason })));
+  }
+  session(id) { return this.byId.get(id)?.s; }
+  hasIssue(id) { return Boolean(this.byId.get(id)?.reasons); }
+  /** Not-yet-started sessions of the therapist in the same calendar week as `session`. */
+  weekPeers(session, now) {
+    const slot = this.weeks.get(session.therapist)?.get(weekKey(session.date, this.config.weekStart));
+    return slot ? [...slot.entries].filter((entry) => entry.s.id !== session.id && entry.start >= now).map((entry) => entry.s) : [];
+  }
+  /** Reassign one session to another therapist. Returns the re-evaluated entries and an undo function. */
+  move(sessionId, therapist) {
+    const entry = this.byId.get(sessionId), old = entry.s, next = { ...old, therapist };
+    const scope = new Set([entry]);
+    for (const { other } of this.neighbours(entry)) scope.add(other);
+    for (const peer of this.weekOf(old.therapist, entry.week).entries) scope.add(peer);
+    const detach = () => {
+      if (entry.indexed) { const list = this.bucketOf('therapist', entry.s.therapist).list; list.splice(list.indexOf(entry), 1); }
+      this.weekOf(entry.s.therapist, entry.week).remove(entry, entry.s.minutes);
+    };
+    const attach = (session) => {
+      entry.s = session; this.candidate.sessions[entry.i] = session;
+      if (entry.indexed) {
+        const bucket = this.bucketOf('therapist', session.therapist, true), list = bucket.list;
+        let lo = 0, hi = list.length;
+        while (lo < hi) { const mid = (lo + hi) >> 1; if (list[mid].start < entry.start || (list[mid].start === entry.start && list[mid].i < entry.i)) lo = mid + 1; else hi = mid; }
+        list.splice(lo, 0, entry); bucket.maxLength = Math.max(bucket.maxLength, entry.end - entry.start);
+      }
+      this.weekOf(session.therapist, entry.week).add(entry, session.minutes);
+    };
+    detach(); attach(next);
+    for (const { other } of this.neighbours(entry)) scope.add(other);
+    for (const peer of this.weekOf(next.therapist, entry.week).entries) scope.add(peer);
+    const previous = new Map([...scope].map((item) => [item, item.reasons]));
+    for (const item of scope) if (item.inPod) this.setReasons(item, this.reasonsOf(item));
+    this.log.push({ sessionId, therapist });
+    const undo = () => {
+      detach(); attach(old);
+      for (const [item, reasons] of previous) { item.reasons = reasons; if (reasons) this.issueEntries.add(item); else this.issueEntries.delete(item); }
+      this.log.pop();
+    };
+    return { scope, undo };
+  }
+  /** Conflict-free therapist choices for one issue session, in client rank order. */
+  workable(sessionId) {
+    const entry = this.byId.get(sessionId);
+    const client = this.clients.get(entry?.s.client);
+    if (!entry || !client || client.pod !== this.pod || entry.start < Date.now()) return [];
+    const before = new Map([...this.issueEntries].map((item) => [item, item.reasons]));
+    const options = [];
+    for (const therapistId of client.assigned) {
+      const therapist = this.candidate.therapists.find((item) => item.id === therapistId && item.active);
+      if (!therapist || therapist.id === entry.s.therapist) continue;
+      const { scope, undo } = this.move(sessionId, therapist.id);
+      const clean = !entry.reasons && [...scope].every((item) => !item.reasons || item.reasons.every((reason) => before.get(item)?.includes(reason)));
+      undo();
+      if (clean) options.push({ therapist: therapist.id, rank: client.assigned.indexOf(therapist.id) + 1, suggested: options.length === 0 });
+    }
+    return options;
+  }
 }
 
+export function draftIssues(data, pod) { return new DraftEngine(data, pod).issues(); }
+
 /** All currently conflict-free therapist choices for one draft issue, in client rank order. */
-export function workableAssignments(data, pod, sessionId) {
-  const { candidate } = draftCandidate(data, pod);
-  const session = candidate.sessions.find((item) => item.id === sessionId);
-  const client = data.clients.find((item) => item.id === session?.client && item.pod === pod);
-  if (!session || !client || interval(session,data.config)[0] < Date.now()) return [];
-  const before = new Map(draftIssues(data, pod).map((issue) => [issue.sessionId, new Set(issue.reasons)]));
-  const options = [];
-  for (const therapistId of client.assigned) {
-    const therapist = data.therapists.find((item) => item.id === therapistId && item.active);
-    if (!therapist || therapist.id === session.therapist) continue;
-    const trial = structuredClone(data);
-    let draft = trial.drafts.find((item) => item.pod === pod);
-    if (!draft) { draft = {id:'preview',pod,changes:[],autoResolveRun:false}; trial.drafts.push(draft); }
-    const previous = draft.changes.find((item) => item.sessionId === sessionId);
-    draft.changes = draft.changes.filter((item) => item.sessionId !== sessionId);
-    draft.changes.push(previous?.kind==='add' ? {...previous,session:{...previous.session,therapist:therapist.id}} : previous?.kind==='reschedule' ? {...previous,therapist:therapist.id} : {kind:'assign',sessionId,therapist:therapist.id});
-    const issues = draftIssues(trial, pod);
-    if (issues.some((issue) => issue.sessionId === sessionId || issue.reasons.some((reason) => !before.get(issue.sessionId)?.has(reason)))) continue;
-    options.push({therapist:therapist.id,rank:client.assigned.indexOf(therapist.id)+1,suggested:options.length===0});
-  }
-  return options;
+export function workableAssignments(data, pod, sessionId) { return new DraftEngine(data, pod).workable(sessionId); }
+/** workableAssignments for several sessions sharing one index. Returns {sessionId: options}. */
+export function workableAssignmentsFor(data, pod, sessionIds) {
+  const engine = new DraftEngine(data, pod);
+  return Object.fromEntries(sessionIds.map((id) => [id, engine.workable(id)]));
 }
+
+const withDraft = (data, pod, changes) => {
+  const drafts = (data.drafts || []).filter((item) => item.pod !== pod);
+  const existing = (data.drafts || []).find((item) => item.pod === pod);
+  drafts.push({ ...(existing || { id: 'proposal', pod, autoResolveRun: false }), changes });
+  return { ...data, drafts };
+};
 
 /** Side-effect-free direct-only diagnostic; the user-facing batch uses boundedResolutionProposal. */
 export function directResolutionProposal(data, pod) {
-  const working = structuredClone(data);
-  let draft = working.drafts.find((item) => item.pod === pod);
-  if (!draft) { draft={id:'proposal',pod,changes:[],autoResolveRun:false}; working.drafts.push(draft); }
-  const original = draftIssues(working,pod);
+  let changes = [...(data.drafts.find((item) => item.pod === pod)?.changes || [])];
+  let engine = new DraftEngine(withDraft(data, pod, changes), pod);
+  const original = engine.issues();
   const proposed = [];
   for (const issue of original) {
-    const current = draftIssues(working,pod).find((item) => item.sessionId === issue.sessionId);
+    const current = engine.issue(issue.sessionId);
     if (!current?.session || !current.reasons.some((reason) => reason.startsWith('Therapist leave:'))) continue;
-    const option = workableAssignments(working,pod,issue.sessionId)[0];
+    const option = engine.workable(issue.sessionId)[0];
     if (!option) continue;
-    const previous=draft.changes.find((item) => item.sessionId === issue.sessionId);
-    draft.changes=draft.changes.filter((item) => item.sessionId !== issue.sessionId);
+    const previous=changes.find((item) => item.sessionId === issue.sessionId);
+    changes=changes.filter((item) => item.sessionId !== issue.sessionId);
     const change=previous?.kind==='reschedule' ? {...previous,therapist:option.therapist} : {kind:'assign',sessionId:issue.sessionId,therapist:option.therapist};
-    draft.changes.push(change);
+    changes.push(change);
+    engine = new DraftEngine(withDraft(data, pod, changes), pod);
     proposed.push({change,causedBy:issue.reasons.filter((reason)=>reason.startsWith('Therapist leave:')),rank:option.rank});
   }
-  return {mode:'direct-only',baseRevision:data.revision,proposed,unresolved:draftIssues(working,pod),allDraftChanges:structuredClone(draft.changes)};
+  return {mode:'direct-only',baseRevision:data.revision,proposed,unresolved:engine.issues(),allDraftChanges:structuredClone(changes)};
 }
 
-const stagePureAssignment = (data,pod,sessionId,therapist) => {
-  const next=structuredClone(data);
-  let draft=next.drafts.find((item)=>item.pod===pod);
-  if (!draft) { draft={id:'proposal',pod,changes:[],autoResolveRun:false}; next.drafts.push(draft); }
-  const previous=draft.changes.find((item)=>item.sessionId===sessionId);
-  draft.changes=draft.changes.filter((item)=>item.sessionId!==sessionId);
-  draft.changes.push(previous?.kind==='add'?{...previous,session:{...previous.session,therapist}}:previous?.kind==='reschedule'?{...previous,therapist}:{kind:'assign',sessionId,therapist});
-  return next;
+const stageChange = (changes,sessionId,therapist) => {
+  const previous=changes.find((item)=>item.sessionId===sessionId);
+  return [...changes.filter((item)=>item.sessionId!==sessionId), previous?.kind==='add'?{...previous,session:{...previous.session,therapist}}:previous?.kind==='reschedule'?{...previous,therapist}:{kind:'assign',sessionId,therapist}];
 };
 
 /** Proposed reassignments only: the caller still has to review and explicitly apply. */
 export function boundedResolutionProposal(data,pod) {
-  let working=structuredClone(data);
-  if (!working.drafts.some((item)=>item.pod===pod)) working.drafts.push({id:'proposal',pod,changes:[],autoResolveRun:false});
+  let changes=[...((data.drafts||[]).find((item)=>item.pod===pod)?.changes||[])];
+  const engine=new DraftEngine(withDraft(data,pod,changes),pod);
   const proposed=[],stops=[];
-  const maxDepth=working.config.cascadeDepth;
-  const extraIssues=(trial,baseline)=>draftIssues(trial,pod).flatMap((issue)=>issue.reasons.filter((reason)=>!baseline.get(issue.sessionId)?.has(reason)).map((reason)=>({sessionId:issue.sessionId,reason})));
-  const blockers=(trial,extras,visited)=>{
-    const {candidate}=draftCandidate(trial,pod);
+  const maxDepth=data.config.cascadeDepth;
+  const blockers=(extras,visited)=>{
     const choices=[];
     for (const extra of extras) {
-      const session=candidate.sessions.find((item)=>item.id===extra.sessionId);
+      const session=engine.session(extra.sessionId);
       if (!session) continue;
       if (extra.reason.startsWith('Therapist overlaps session ')) choices.push({id:extra.reason.slice('Therapist overlaps session '.length,-1),displacedBy:session.id});
-      else if (extra.reason.startsWith('Weekly cap exceeded')) choices.push(...candidate.sessions.filter((item)=>item.id!==session.id&&item.therapist===session.therapist&&interval(item,candidate.config)[0]>=Date.now()&&weekKey(item.date,candidate.config.weekStart)===weekKey(session.date,candidate.config.weekStart)).map((item)=>({id:item.id,displacedBy:session.id})));
+      else if (extra.reason.startsWith('Weekly cap exceeded')) choices.push(...engine.weekPeers(session,Date.now()).map((item)=>({id:item.id,displacedBy:session.id})));
       else return null;
     }
     return choices.filter((choice,index)=>!visited.has(choice.id)&&choices.findIndex((other)=>other.id===choice.id)===index).sort((a,b)=>a.id.localeCompare(b.id));
   };
-  const search=(trial,baseline,rootId,visited,remaining,links=[])=>{
-    const extras=extraIssues(trial,baseline);
-    const rootStillOutstanding=draftIssues(trial,pod).some((item)=>item.sessionId===rootId);
-    if (!extras.length) return rootStillOutstanding ? null : {trial,links};
+  // The engine holds the trial state: a successful search leaves its moves applied, a failed one restores the state it was given.
+  const search=(baseline,rootId,visited,remaining,links=[])=>{
+    const extras=engine.extraIssues(baseline);
+    const rootStillOutstanding=engine.hasIssue(rootId);
+    if (!extras.length) return rootStillOutstanding ? null : {links};
     if (remaining===0) return null;
-    const choices=blockers(trial,extras,visited);
+    const choices=blockers(extras,visited);
     if (!choices?.length) return null;
-    const {candidate}=draftCandidate(trial,pod);
     for (const {id,displacedBy} of choices) {
       if (id===rootId) continue;
-      const session=candidate.sessions.find((item)=>item.id===id);
-      const client=candidate.clients.find((item)=>item.id===session?.client && item.pod===pod);
-      if (!session||!client||interval(session,candidate.config)[0]<Date.now()) continue;
+      const session=engine.session(id);
+      const client=engine.clients.get(session?.client);
+      if (!session||!client||client.pod!==pod||interval(session,engine.config)[0]<Date.now()) continue;
       for (const therapistId of client.assigned) {
         const rank=client.assigned.indexOf(therapistId)+1;
-        if (therapistId===session.therapist||!candidate.therapists.some((item)=>item.id===therapistId&&item.active)) continue;
-        const moved=stagePureAssignment(trial,pod,id,therapistId);
-        const nextVisited=new Set([...visited,id]);
-        const hasNewIssues=extraIssues(moved,baseline).length>0;
-        const result=hasNewIssues&&rank!==2?null:search(moved,baseline,rootId,nextVisited,remaining-1,[...links,{sessionId:id,displacedBy}]);
+        if (therapistId===session.therapist||!engine.candidate.therapists.some((item)=>item.id===therapistId&&item.active)) continue;
+        const {undo}=engine.move(id,therapistId);
+        const hasNewIssues=engine.extraIssues(baseline).length>0;
+        const result=hasNewIssues&&rank!==2?null:search(baseline,rootId,new Set([...visited,id]),remaining-1,[...links,{sessionId:id,displacedBy}]);
         if (result) return result;
+        undo();
       }
     }
     return null;
   };
-  for (const initial of draftIssues(working,pod)) {
-    const issue=draftIssues(working,pod).find((item)=>item.sessionId===initial.sessionId);
+  for (const initial of engine.issues()) {
+    const issue=engine.issue(initial.sessionId);
     if (!issue?.session||!issue.reasons.some((reason)=>reason.startsWith('Therapist leave:'))) continue;
-    if (interval(issue.session,working.config)[0] < Date.now()) { stops.push({sessionId:issue.sessionId,reason:'This session has already started; automatic changes to past sessions are not allowed.'}); continue; }
-    const client=working.clients.find((item)=>item.id===issue.session.client);
+    if (interval(issue.session,engine.config)[0] < Date.now()) { stops.push({sessionId:issue.sessionId,reason:'This session has already started; automatic changes to past sessions are not allowed.'}); continue; }
+    const client=data.clients.find((item)=>item.id===issue.session.client);
     if (client?.assigned[0]!==issue.session.therapist) { stops.push({sessionId:issue.sessionId,reason:'Automatic replacement currently supports a leave-affected first-ranked therapist; edit this session manually.'}); continue; }
-    const baseline=new Map(draftIssues(working,pod).map((item)=>[item.sessionId,new Set(item.reasons)]));
-    const before=new Map(working.drafts.find((item)=>item.pod===pod).changes.map((item)=>[item.sessionId,JSON.stringify(item)]));
+    const baseline=engine.baseline();
+    const before=new Map(changes.map((item)=>[item.sessionId,JSON.stringify(item)]));
+    const mark=engine.log.length;
     let solved=null;
     const second=client.assigned[1];
-    if (working.therapists.some((item)=>item.id===second&&item.active)) solved=search(stagePureAssignment(working,pod,issue.sessionId,second),baseline,issue.sessionId,new Set([issue.sessionId]),maxDepth);
+    if (data.therapists.some((item)=>item.id===second&&item.active)) {
+      const {undo}=engine.move(issue.sessionId,second);
+      solved=search(baseline,issue.sessionId,new Set([issue.sessionId]),maxDepth);
+      if (!solved) undo();
+    }
     if (!solved) {
-      const third=workableAssignments(working,pod,issue.sessionId).find((item)=>item.rank===3);
-      if (third) solved={trial:stagePureAssignment(working,pod,issue.sessionId,third.therapist),links:[]};
+      const third=engine.workable(issue.sessionId).find((item)=>item.rank===3);
+      if (third) { engine.move(issue.sessionId,third.therapist); solved={links:[]}; }
     }
     if (!solved) { stops.push({sessionId:issue.sessionId,reason:`No safe automatic assignment within cascade depth ${maxDepth}; manual edit or cancellation remains available.`}); continue; }
-    working=solved.trial;
+    for (const move of engine.log.slice(mark)) changes=stageChange(changes,move.sessionId,move.therapist);
     const causeById=new Map(solved.links.map((link)=>[link.sessionId,link.displacedBy]));
-    const resolvedSessions=draftCandidate(working,pod).candidate.sessions;
-    for (const change of working.drafts.find((item)=>item.pod===pod).changes) if (before.get(change.sessionId)!==JSON.stringify(change)) {
-      const affected=resolvedSessions.find((item)=>item.id===change.sessionId);
-      const assigned=working.clients.find((item)=>item.id===affected?.client)?.assigned||[];
+    for (const change of changes) if (before.get(change.sessionId)!==JSON.stringify(change)) {
+      const affected=engine.session(change.sessionId);
+      const assigned=data.clients.find((item)=>item.id===affected?.client)?.assigned||[];
       proposed.push({change:structuredClone(change),rank:assigned.indexOf(change.therapist||change.session?.therapist)+1,causedBy:issue.reasons.filter((reason)=>reason.startsWith('Therapist leave:')),displacedBy:causeById.get(change.sessionId)||null});
     }
   }
-  return {mode:'bounded',baseRevision:data.revision,cascadeDepth:maxDepth,proposed,unresolved:draftIssues(working,pod),stops,allDraftChanges:structuredClone(working.drafts.find((item)=>item.pod===pod).changes)};
+  return {mode:'bounded',baseRevision:data.revision,cascadeDepth:maxDepth,proposed,unresolved:engine.issues(),stops,allDraftChanges:structuredClone(changes)};
 }
 
 export function withConflicts(data) { return { ...data, conflicts: leaveConflicts(data), draftIssues: Object.fromEntries((data.drafts||[]).map((draft)=>[draft.pod,draftIssues(data,draft.pod)])) }; }
 export function overlaps(a, b, config) { const [as, ae] = interval(a, config); const [bs, be] = interval(b, config); return as < be && bs < ae; }
 export function weekday(date) { const day = new Date(parseDate(date)).getUTCDay(); return day || 7; }
 export function weekKey(date, weekStart = 1) {
+  const cacheKey = `${weekStart}|${date}`; const cached = weekKeyCache.get(cacheKey); if (cached !== undefined) return cached;
   const ms = parseDate(date); const delta = (weekday(date) - weekStart + 7) % 7;
-  return new Date(ms - delta * DAY_MS).toISOString().slice(0,10);
+  const result = new Date(ms - delta * DAY_MS).toISOString().slice(0,10);
+  if (Number.isInteger(weekStart)) weekKeyCache.set(cacheKey, result);
+  return result;
 }
 export function addDays(date, days) { return new Date(parseDate(date) + days * DAY_MS).toISOString().slice(0,10); }
 export function datesWeekly(start, end) {
@@ -303,21 +473,39 @@ export function validateState(data, {allowHistoric = true} = {}) {
     if (!leave.id || !data.therapists.some((t) => t.id === leave.therapist && t.pod === leave.pod) || !data.pods.some((p) => p.id === leave.pod)) throw new Error('Leave requires a therapist in its pod.');
     leaveInterval(leave, c);
   }
-  for (const s of data.sessions) validateSessionShape(data, s, {allowHistoric});
-  for (let i=0;i<data.sessions.length;i++) for (const other of data.sessions.slice(i+1)) {
-    const s=data.sessions[i]; if (!overlaps(s, other, c)) continue;
-    if (s.therapist === other.therapist) throw new Error(`Therapist overlap: ${s.id} and ${other.id}.`);
-    if (s.client === other.client) throw new Error(`Client overlap: ${s.id} and ${other.id}.`);
-    if (s.location === 'clinic' && other.location === 'clinic' && s.room === other.room) throw new Error(`Room overlap: ${s.id} and ${other.id}.`);
-  }
+  const lookups = shapeLookups(data);
+  for (const s of data.sessions) validateSessionShape(data, s, {allowHistoric, lookups});
+  assertNoOverlaps(data.sessions, c);
   const loads = new Map(); for (const s of data.sessions) { const key=`${s.therapist}:${weekKey(s.date,c.weekStart)}`; loads.set(key,(loads.get(key)||0)+s.minutes); }
   for (const [key, minutes] of loads) { const therapist = data.therapists.find(t=>key.startsWith(`${t.id}:`)); if (minutes > therapist.capHours * 60) throw new Error(`Weekly cap exceeded for ${therapist.name}.`); }
   return data;
 }
 
-export function validateSessionShape(data, s, {allowHistoric = true} = {}) {
+/** Throws for the first overlapping pair (earliest session, then earliest partner; therapist, client, room in that order). Sorted-bucket sweep, not all pairs. */
+function assertNoOverlaps(sessions, config) {
+  const kinds = [['Therapist', (s) => s.therapist], ['Client', (s) => s.client], ['Room', (s) => (s.location === 'clinic' ? s.room : undefined), (s) => s.location === 'clinic']];
+  const spans = sessions.map((s, i) => { const [start, end] = interval(s, config); return { s, i, start, end }; }).filter((e) => Number.isFinite(e.start) && Number.isFinite(e.end));
+  let best = null;
+  kinds.forEach(([label, key, applies], rank) => {
+    const buckets = new Map();
+    for (const e of spans) { if (applies && !applies(e.s)) continue; const k = key(e.s); const list = buckets.get(k); if (list) list.push(e); else buckets.set(k, [e]); }
+    for (const list of buckets.values()) {
+      if (list.length < 2) continue;
+      list.sort((x, y) => x.start - y.start);
+      for (let x = 0; x < list.length; x++) for (let y = x + 1; y < list.length && list[y].start < list[x].end; y++) {
+        if (!(list[x].start < list[y].end)) continue;
+        const lo = Math.min(list[x].i, list[y].i), hi = Math.max(list[x].i, list[y].i);
+        if (!best || lo < best.lo || (lo === best.lo && (hi < best.hi || (hi === best.hi && rank < best.rank)))) best = { lo, hi, rank, label };
+      }
+    }
+  });
+  if (best) throw new Error(`${best.label} overlap: ${sessions[best.lo].id} and ${sessions[best.hi].id}.`);
+}
+
+export function validateSessionShape(data, s, {allowHistoric = true, lookups = null} = {}) {
   const historic=allowHistoric && interval(s,data.config)[0] < Date.now();
-  const client=data.clients.find((item)=>item.id===s.client), therapist=data.therapists.find((item)=>item.id===s.therapist);
+  const lk = lookups || { client: (id) => data.clients.find((item)=>item.id===id), therapist: (id) => data.therapists.find((item)=>item.id===id), room: (id) => data.rooms.find((room)=>room.id===id), series: (id) => data.series.some((series)=>series.id===id) };
+  const client=lk.client(s.client), therapist=lk.therapist(s.therapist);
   if (!s.id || !client || !therapist || client.pod !== therapist.pod || (!historic && (!client.active || !therapist.active || !client.assigned.includes(therapist.id)))) throw new Error('Session requires an active client and one of its assigned therapists.');
   if (!Number.isInteger(s.minutes) || s.minutes <= 0 || s.minutes > 480) throw new Error('Duration must be between 1 and 480 minutes.');
   localInstant(s.date,s.time,data.config.timezone);
@@ -325,8 +513,8 @@ export function validateSessionShape(data, s, {allowHistoric = true} = {}) {
   if (!historic && (!data.config.workingDays.includes(weekday(s.date)) || localStart < minutesAt(data.config.open) || localEnd > minutesAt(data.config.close))) throw new Error('Session falls outside configured working days or office hours.');
   if (!['clinic','home'].includes(s.location)) throw new Error('Location must be Clinic or Home.');
   if (s.location === 'home' && s.room !== null) throw new Error('Home sessions cannot reserve a room.');
-  if (s.location === 'clinic' && !data.rooms.some((room)=>room.id===s.room&&(historic||room.active))) throw new Error(`Clinic session requires active shared room ${s.room}.`);
-  if (s.seriesId !== undefined && s.seriesId !== null && !data.series.some(series=>series.id===s.seriesId)) throw new Error('Session refers to an unknown series.');
+  if (s.location === 'clinic' && !((room)=>room&&(historic||room.active))(lk.room(s.room))) throw new Error(`Clinic session requires active shared room ${s.room}.`);
+  if (s.seriesId !== undefined && s.seriesId !== null && !lk.series(s.seriesId)) throw new Error('Session refers to an unknown series.');
 }
 
 export function blockersForSetup(before, after) {
