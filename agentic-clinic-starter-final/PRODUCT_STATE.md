@@ -201,3 +201,10 @@ Owner-only steps:
 UAT stays held, and DEBT-001 (the cleanup pass) comes after M3.
 
 Usage guard (D-P043/D-P044): stop at 70% of either limit, then schedule a resume after the reset. Usage at this checkpoint was 62% of the 5-hour limit and 16% of the weekly limit. The 5-hour window resets at 2026-09-29 07:30 UTC.
+
+## 2026-09-29 ~04:45 UTC — usage pause (D-P043)
+Paused at 66% of the 5-hour limit and 16% of the weekly limit. The next step, end-to-end acceptance plus M3 review preparation, would cross the 70% guard. No worker is running. The US-015 CLI tool is committed (34382f3), and 72/72 tests pass. A one-time wake-up task, `clinic-resume-after-usage-reset`, fires at 2026-09-29 07:36 UTC (03:36 Toronto), after the 07:30 UTC reset.
+Resume with:
+1. End-to-end acceptance of US-005 and US-006 on a TEST-backed dev server on a separate port. Do not commit to DEV, and do not run web:test at the same time.
+2. Write the M3 Sprint Review.
+3. Stop for the owner.
