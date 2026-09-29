@@ -162,3 +162,108 @@ Add session must support recurring sessions. Reports use committed schedules onl
 Status: APPROVED by Business Owner
 Source: “looks good, i think we can move to developement phase”.
 Accept S3 UX-001–009 as the UI/workflow baseline, milestone M2. Authorize transition to development planning behind the approved UI. This does not resolve outstanding production rules or retroactively accept S2 as a separate milestone. New implementation sprint requires a concrete ready plan under PM charter; collect only blocking rules for its scope. Preserve existing implementation in checkpoint, explicitly distinguish prototype from operational behavior.
+
+## D-P036 — Configurable calendar and recurrence defaults
+Status: APPROVED delegation of defaults by Business Owner
+Source: “all those should be config able, u can assign a reasonable default value”, replying to clinic boundaries and recurrence questions.
+Make timezone, working days/hours, weekly-cap week start and recurrence defaults configurable. PM initial defaults: America/Toronto; Monday–Friday 09:00–17:00; Monday week start; weekly recurrence with editable required end date defaulting to 12 weeks. Offer this occurrence or this-and-future editing. This settles initial settings, not all historical reconfiguration/holiday/series exception behavior. PM recommends impact review instead of silently altering existing bookings when settings change; detail in development plan. Leave persistence, cascade semantics and other unrelated questions remain open.
+
+## D-P037 — Sprint 4 implementation approved
+Status: APPROVED by Business Owner
+Source: “approved” in response to concrete SPRINT_4_PROPOSAL.md and lifecycle recommendation.
+Authorize US-011–014 and TASK-006 as one complete sprint: persistent configurable Setup, one-off/weekly Calendar sessions, transaction-time core conflict validation and committed monthly reports. Block Setup/person/assignment/cap changes that invalidate bookings, list blockers, never silently alter sessions. Approve plan's direct choice among three assigned therapists, past-occurrence preservation, this/this-and-future edits and no automatic holiday calendar. D-P036 defaults apply. Leave/cascades/drafts/notifications remain deferred. S4 completion requires whole-sprint review; M2 stays accepted checkpoint.
+
+## D-P038 — Four-phase workflow and usage auto-resume
+Status: APPROVED by explicit owner instruction, 2026-09-16
+Adopt WORKFLOW.md: UI mocks without operational logic; owner-discussed infrastructure/structure; near-autonomous development of the complete approved requirements with only consequential escalations; final review then normal Scrum iterations. Supersedes repeated internal sprint approval stops during phase3. Preserve M2 and partial S4; return to infrastructure approval before further development. Configure periodic usage guard, hard-stop >80% and automatic post-reset resume of authorized work only. No automatic paid capacity or reset-credit use. Historical milestone tags preserved.
+
+## D-I001 — Infrastructure priorities from owner
+Status: REQUIREMENTS recorded; stack selection pending discussion
+Finished product should deploy easily on Synology NAS, use mainstream technology, support free/very-low-cost online hosting, and run on Azure and AWS. Embedded database without a separate DB service is preferred, not mandatory. Evaluate portable single-app container plus SQLite with durable local storage, and document free-host persistence tradeoff before stack approval. Ask NAS model/DSM to verify compatibility. No hosting purchase/deployment authorized.
+
+## D-I002 — Managed cloud and one database engine everywhere
+Status: Owner constraints approved; provider/stack selection under discussion
+Owner requires managed cloud services and rejects different database engines by environment. Supersedes proposed SQLite NAS / PostgreSQL cloud split (never approved). NAS model DS916+. Evaluate Vercel plus Neon, with PostgreSQL for development, automated integration tests, NAS and cloud; separate databases/credentials per environment, same schema/migrations and compatible major version. Embedded DB preference yields to engine consistency if PostgreSQL chosen. No provider provisioning authorized yet.
+
+## D-I003 — Proposed local DEV/test and hosted UAT
+Status: Owner-proposed environment direction; final infrastructure approval pending
+Use local PC for rapid DEV/test; Vercel plus Neon Free for synthetic UAT/demo; defer production hosting selection. Keep PostgreSQL engine/version/schema/migrations consistent with separate environment databases/credentials. Vercel plan eligibility must reflect business UAT use, not assume Hobby permitted just because non-production. UAT database disposable synthetic data only, no production dependency. No provisioning or paid purchase authorized by this discussion.
+
+## D-I004 — Local-only config and environment readiness
+Owner authorizes Git-ignored project config folder; .local created and verified. DEV, isolated PostgreSQL tests and protected Vercel/Neon UAT must be established and verified before autonomous development. Environment loading/provisioning remains pending; no provider purchase authorization inferred.
+
+## D-I005 — Local DEV setup authorized; UAT deferred
+Owner requests holding UAT setup and proceeding with local DEV. Authorize local Next.js/TypeScript infrastructure and PostgreSQL development foundation with isolated test database, preserving accepted prototype and partial legacy work. No business logic migration or cloud provisioning in this task. UAT is no longer a blocker for local infrastructure completion; full development phase transition follows verified local foundation and recorded remaining decisions.
+
+## D-P039 — Owner authorizes development resumption
+Status: APPROVED by explicit owner instruction, 2026-09-21
+Source: resume the development, following verified local Next.js/TypeScript/PostgreSQL DEV and TEST foundation and PM status explanation. Resume approved S4 normal scheduling scope on this foundation, preserving accepted M2 UX and partial legacy source. UAT remains held. Continue internally without routine sprint gates under D-P038; significant unresolved leave/cascade rules still require owner decisions. This is development authorization, not acceptance of incomplete S4 or a new completed-product milestone.
+
+## D-B006 — Leave retention, shared drafts and partial-day support
+Status: APPROVED by explicit owner answers, 2026-09-21
+Keep reported leave recorded when schedule draft changes are abandoned; remaining affected sessions still require resolution. Each pod has one shared unfinished draft visible to its admins. Support partial-day leave as well as whole-day leave; do not implement whole-day-only assumptions. Date/time intervals use configured clinic timezone and overlap with session intervals. Detailed leave-edit refresh/cascade decisions remain open.
+
+## D-P040 — Resume development with updated model choices
+Status: APPROVED by explicit owner instruction, 2026-09-22
+
+Owner lifts the temporary pause and requests development resume. Use GPT-6 Sol for Main PM and substantial implementation/verification at medium reasoning by default, GPT-6 Luna for small bounded tasks, and Astra only for exceptional difficult work. Supersedes the Terra-first allocation in D-P029. Retain the existing usage guard, scope, gates, and UAT hold. Model selection does not imply a billing change or measured savings.
+
+## D-B007 — Configurable cascade and explicit auto-resolve draft workflow
+Status: APPROVED DESIGN by owner discussion, 2026-09-23; implementation may proceed under owner development resumption
+
+The clinic-wide Setup setting permits cascade depth 0, 1 or 2, default 1; depth counts other sessions displaced in one chain. Third-therapist fallback remains non-cascading. Calendar conflicts update live after draft edits, and a Recheck conflicts button reruns validation on demand. Auto resolve is explicit, inspects all outstanding conflicts, proposes safe supported resolutions up to configured depth and lists every impacted/modified session plus unresolved items and explanations. Suggestions are reviewed before being applied to the shared draft. Admin may discard just the suggestions, apply and continue manually edit, then Commit schedule only when all conflicts are gone. Discard draft abandons all uncommitted schedule changes while recorded leave and its unresolved issues remain (D-B006). Commit always revalidates latest shared state, including clinic-wide rooms. No silent committed-schedule changes or automatic session cancellations.
+
+## D-B008 — Record inputs before an exclusive schedule-editing session
+Status: APPROVED by owner discussion and explicit development resumption, 2026-09-23
+
+Recording leave and saving Setup changes are independent committed inputs, not uncommitted schedule edits. Recording a second leave recomputes the current outstanding conflict set without duplicating issues. An admin may leave those conflicts outstanding while doing other work. Auto resolve should normally be run after the admin has recorded all expected inputs. As soon as that admin has uncommitted schedule changes, they remain in the Calendar editing session: keep editing (including Recheck conflicts), Commit schedule, or Discard schedule changes. Other admins are not globally locked out; relevant changes they make while a shared pod draft exists cause its issues to refresh, and commit revalidates the latest state. Discarding schedule changes never discards recorded leave or saved Setup records. The committed-schedule conflict indicator must remain truthful while a draft merely proposes a fix. Auto resolve is one run within an unchanged editing session; a fresh relevant input invalidates a pending proposal rather than silently applying stale changes. Exact leave amendment and moved-session-duration rules remain open for their affected work.
+
+## D-B009 — Pod-scoped admins, leave edits, and rescheduled duration
+Status: APPROVED by explicit owner answers, 2026-09-23
+
+Admins manage people, leave and schedules only within their own pod. Rooms remain shared across pods and room occupancy must still be checked clinic-wide. An admin may explicitly change an existing session's duration when rescheduling it; the full new interval must pass all scheduling checks. While a pod has an open shared schedule draft, edits or withdrawals of that pod's recorded leave are blocked until commit or discard. This resolves Q-003 and Q-005. Who can change clinic-wide room inventory and how admin pod identity is established remain separate access-design questions.
+
+## D-P041 — Continue development through the weekly usage allowance
+Status: APPROVED by explicit owner instruction, 2026-09-23
+
+For the current autonomous development run, continue approved work past the earlier 70% conservation and 80% hard-stop thresholds until the weekly Codex allowance actually prevents further work. Check fresh usage during work, save an exact checkpoint at the limit, and resume after the relevant reset if approved work remains. Never purchase or redeem credits automatically. This is a usage-policy exception, not authorization for UAT, production access assumptions, or new product scope.
+
+## D-B010 — Admin pod assignment and shared configuration
+Status: APPROVED by explicit owner answers, 2026-09-28
+
+All admins have the same administrative rights; there is no separate clinic-owner role. Pod membership is assigned on a config page before an admin can access pod-specific work. Any admin may change pod members on that page at any time. An admin's ordinary people, leave, schedule, draft, report and notification access is limited to the pod currently assigned to that admin (D-B009), while room inventory is shared clinic-wide and any admin may manage it. The server must read the current assignment from trusted storage for each request; a browser pod selector or submitted pod ID cannot grant access. Reassignment must take effect on subsequent requests without changing committed records or an open draft. Authentication/provider details remain a separate deployment choice.
+
+## D-B011 — Clinic-managed admin identity
+Status: APPROVED by explicit owner answer, 2026-09-28
+
+Use clinic-managed admin accounts for production sign-in, with server-validated sessions before applying D-B010 pod membership. Do not rely on the local DEV pod selector or a client-supplied role/identity. The first-account bootstrap method remains an implementation decision awaiting the owner's answer.
+
+## D-P042 — Claude agent team replaces the Codex allocation
+Status: APPROVED by explicit owner instruction, 2026-09-28
+
+The owner handed the project from Codex to Claude Code and requested a Codex-like agent structure. The owner is Product Owner / Business Owner. Claude Opus 5.5 is the Main PM: owner communication, backlog and decision ownership, Ready Gate, sprint planning, review of worker evidence, and final acceptance. Claude Sonnet 5.5 workers, defined in `../.claude/agents/`, do the delegated work: `discovery` (read-only scenario discovery and scope reconciliation; proposes items), `developer` (one Ready backlog item at a time, with tests; no governance-doc edits or git writes), and `qa` (independent verification and audits; no code changes). Workers receive focused handoffs, not conversation history; the PM checks their evidence before any status transition. This supersedes the Sol/Luna/Astra allocation in D-P040 and PM_AGENT.md. The owner lifts the 2026-09-28 handoff pause. Gates, scope, UAT hold and open owner questions (Q-017, first-admin bootstrap) are unchanged.
+
+## D-P043 — Claude usage guard at 70%
+Status: APPROVED by explicit owner instruction, 2026-09-28
+
+As with Codex, stop running at 70% of either the Claude plan's 5-hour limit or its weekly limit. The PM reads live usage with the desktop app's usage tool (`get_usage`). It checks before every worker dispatch and at every checkpoint, and when a worker returns. If either window is above 70%, dispatch no new work. Let any running worker finish its current step, then record the exact resume point, usage and reset times in PRODUCT_STATE.md, and stop. If usage cannot be read, treat it as unknown, not zero, and do not dispatch substantial work. Never buy credits or consume extra usage. The account has extra usage enabled, and the 70% stop is intended to keep work well clear of it. Resume only when the owner resumes, or after a verified reset brings every window to 70% or below, if the owner has enabled automatic resumption. D-P041 is inactive. The Codex `clinic-usage-guard-and-resume` heartbeat does not apply.
+
+## D-B012 — Historical leave conflicts are non-blocking alerts
+Status: APPROVED by explicit owner answer, 2026-09-28 (resolves Q-017)
+
+A committed session that has already started while a recorded leave overlaps it becomes a historical alert. It stays visible and is never silently changed or erased, but it no longer blocks schedule-draft commits or direct scheduling in its pod. The original committed booking and the leave record are both preserved. Future (not yet started) leave conflicts still block commit under SPEC §4 rule 8.
+
+## D-B013 — First admin via one-time local CLI
+Status: APPROVED by explicit owner answer, 2026-09-28
+
+The first real admin account is created with a one-time local command-line bootstrap. The password is entered at an interactive prompt and never in command arguments, Git, logs or docs, as ACCESS_SETUP.md proposes. The owner runs the password prompt; agents never handle the real password.
+
+## D-P044 — Automatic resumption after a usage reset
+Status: APPROVED by explicit owner answer, 2026-09-28
+
+When work stops only because of the D-P043 70% usage guard, the PM resumes on its own after the limiting window has reset and every window is at or below 70%. To do this, the PM schedules a one-time resume task at the recorded reset time and rechecks live usage on waking. It never resumes past an owner gate, a pending blocking owner question, or an explicit owner pause.
+
+## D-P045 — Architecture review before finishing development
+Status: APPROVED by explicit owner answer, 2026-09-28
+
+Review the existing code now. Propose a major structural change only if something is seriously wrong. Otherwise finish development first and do the cleanup pass before UAT.

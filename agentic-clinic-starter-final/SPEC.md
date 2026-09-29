@@ -6,6 +6,18 @@
 > tech stack, data schema, file structure, and API shape — those are
 > implementation decisions for later, not part of the spec itself.
 
+## Owner-approved workflow amendments (D-B007, 2026-09-23)
+
+The main Calendar shows and updates the outstanding conflict list as schedule drafts change. A separate **Recheck conflicts** control lets an admin rerun validation on demand; commit always revalidates against the latest shared schedule and clinic-wide room inventory.
+
+The clinic-wide Setup setting for automatic cascade depth is 0, 1, or 2, initially 1. Depth counts the number of other sessions displaced in one chain. Third-therapist fallback does not cascade. **Auto resolve** is an explicit admin action: it inspects all outstanding conflicts, proposes only safe changes for conflict types it supports, and lists every impacted/modified session plus unresolved items and reasons. It does not change the committed schedule.
+
+The admin reviews the proposal and may apply its suggestions to the shared draft or discard those suggestions. After applying, the admin may keep editing the draft Calendar. **Commit schedule** is a separate final action, available only with zero outstanding conflicts. **Discard draft** abandons uncommitted schedule changes; recorded leave is retained and affected sessions remain issues under D-B006. These actions do not silently cancel sessions.
+
+Leave and Setup inputs are saved independently before schedule editing. Multiple leave reports recompute one current conflict set; the admin may leave it outstanding and do other work. After the first uncommitted schedule edit, that admin stays in Calendar editing mode until **Commit schedule** or **Discard schedule changes**. Recheck conflicts and further Calendar edits remain available. Other admins may work; their relevant changes refresh the shared draft and are revalidated at commit. A draft resolution must not make the committed-schedule conflict indicator falsely show zero. Auto resolve runs once for an unchanged editing session; a changed input invalidates a pending proposal. See D-B008.
+
+Under D-B009, each admin manages only their own pod's people, leave, sessions and draft. The shared rooms still require clinic-wide occupancy checks. An admin may change a session's duration as part of rescheduling it; the entire new booked interval is checked. Edits or withdrawals of recorded leave in a pod wait while that pod has an open shared schedule draft, then may proceed after commit or discard.
+
 ## 1. Purpose
 
 The clinic (30 therapists, 100 clients) needs a system that keeps each
@@ -50,8 +62,8 @@ Described conceptually — not a data model or schema.
 - **Leave**: a therapist reports being unavailable for one or more dates
   (holiday, planned in advance, or sick, ad hoc/short notice). Leave can be a
   single day or an extended range (e.g. two weeks).
-- **Batch**: one round of admin work triggered by reporting leave for one or
-  more therapists at once. A batch belongs to one admin and one pod.
+- **Schedule draft**: one shared unfinished set of proposed schedule changes
+  per pod. Recorded leave and saved Setup changes are separate committed inputs.
 - **Issue**: one session instance that needs a new resolution because the
   therapist who was supposed to hold it is now on leave, or because
   resolving a different issue bumped this session as a side effect. A batch
@@ -82,7 +94,7 @@ Described conceptually — not a data model or schema.
 7. No change to the real schedule happens without an explicit admin decision
    on every affected session — the system proposes, it never silently
    auto-applies, even when it's fully confident in a suggestion.
-8. A batch cannot be committed while it still has unresolved issues.
+8. A schedule draft cannot be committed while it still has unresolved issues.
 
 ## 5. The Reassignment Procedure
 
@@ -124,32 +136,30 @@ for that issue, or cancel the session, regardless of what the system proposed.
 
 ## 6. Workflow
 
-1. **Report leave.** An admin reports one or more therapists as on leave over
-   one or more date ranges, all as part of one batch (covers both a single
-   ad-hoc call-out and a multi-week planned leave affecting many therapists
-   at once).
-2. **Issues surface immediately.** Every session instance that belonged to a
-   now-unavailable therapist becomes an open issue in the batch. The admin
-   sees the count up front (e.g. "5 sessions need attention").
-3. **The system proposes a resolution for each issue** using the procedure in
-   Section 5, computed against the *current state of the batch* — including
-   decisions already made earlier in the same review — so later suggestions
-   stay consistent with earlier ones.
-4. **The admin works through the issues.** For each: accept the suggestion,
-   override it with a different valid option, or cancel the session. Deciding
-   one issue can surface new issues (a bumped client's session needs its own
-   resolution) — these are added to the worklist, not hidden inside another
-   issue's resolution. If an admin's override contradicts what a later
-   suggestion assumed, that later issue is refreshed (or reopened, if already
-   decided) so nothing goes stale silently.
-5. **Commit.** Once every issue in the batch has a decision (none left open),
-   the admin commits. Only at this point does the real schedule actually
-   change. Committing also creates notification tasks for every client and
-   therapist whose sessions changed or were cancelled, so the clinic can
-   inform them.
-6. **Abandon (alternative to commit).** The admin can instead discard the
-   whole batch at any point before committing — nothing about the real
-   schedule changes, and no notifications are generated.
+1. **Record inputs.** An admin saves one or more therapist leaves, including
+   partial-day intervals, and may save Setup changes before schedule editing.
+   Each leave persists independently of a schedule draft.
+2. **Conflicts surface immediately.** Affected committed sessions appear as
+   outstanding conflicts. Another leave recomputes the list without duplicate
+   session items. The admin may leave these conflicts outstanding and work on
+   other tasks before beginning schedule edits.
+3. **Begin schedule editing.** The admin explicitly runs Auto resolve or edits
+   the Calendar. Auto resolve previews all proposed, impacted and unresolved
+   sessions using Section 5 against the latest schedule and inputs. A proposal
+   does not alter the committed schedule; the admin applies or discards it.
+4. **Work in the shared draft.** After the first uncommitted schedule change,
+   the admin remains in Calendar editing mode. They may edit further and use
+   Recheck conflicts repeatedly. Cascades and manual edits refresh or reopen
+   issues visibly. A fresh relevant input from another admin invalidates a
+   pending proposal and refreshes the draft's conflict list.
+5. **Commit.** Once all issues are resolved, the admin explicitly commits.
+   The system revalidates the latest shared pod and clinic-wide room state,
+   publishes all schedule decisions atomically, and creates notification
+   tasks for clients and therapists affected by changes or cancellations.
+6. **Discard schedule changes (alternative to commit).** The admin may
+   discard the unfinished draft. No schedule change or notification is
+   published. Recorded leave and saved Setup inputs remain, and unresolved
+   committed-schedule conflicts stay visible.
 
 ## 7. Scale & Usability Expectations
 
@@ -158,6 +168,7 @@ for that issue, or cancel the session, regardless of what the system proposed.
   multiple weeks (an extended planned leave for several therapists at once) —
   the difference is volume, not a different process.
 - Therapists and clients remain pod-scoped. Rooms are shared across pods, so separate admins can conflict over rooms; room availability must be checked clinic-wide before commit.
+- All admins have equal administrative rights. A config page assigns each admin to a pod before pod-specific access, and any admin can change pod memberships later. Ordinary pod data and draft access follows the admin's current server-trusted assignment; all admins may manage clinic-wide room inventory (D-B010).
 - Every proposed and resolved change must show *why* — which absence caused
   it, and (for a cascaded change) which other client's move made it possible
   — so an admin reviewing a large batch isn't just seeing "Client X moved to

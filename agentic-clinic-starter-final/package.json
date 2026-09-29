@@ -2,6 +2,16 @@
   "name": "clinic-schedule-baseline",
   "private": true,
   "type": "module",
-  "scripts": {"start": "node app.mjs", "test": "node --test"},
+  "scripts": {
+    "start": "node app.mjs",
+    "test": "node --test",
+    "dev": "npm --prefix web run dev",
+    "build": "npm --prefix web run build",
+    "web:test": "npm --prefix web run test",
+    "infra:up": "docker compose up -d",
+    "infra:down": "docker compose down",
+    "infra:logs": "docker compose logs --tail=100",
+    "infra:test": "node scripts/infra-smoke.mjs"
+  },
   "engines": {"node": ">=22"}
 }

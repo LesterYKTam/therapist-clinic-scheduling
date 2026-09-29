@@ -1,1 +1,13 @@
 data/
+
+# Local credentials and environment configuration
+/.local/
+.env
+.env.*
+!.env.example
+
+# Dependencies and generated build output
+node_modules/
+.next/
+*.tsbuildinfo
+next-env.d.ts

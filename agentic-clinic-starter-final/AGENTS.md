@@ -1,5 +1,7 @@
 # Agent Operating Constitution
 
+Owner-approved phase policy: WORKFLOW.md (2026-09-16) governs phase-specific gates; it supersedes older per-sprint stops during autonomous development.
+
 ## 1. Authority hierarchy
 
 1. Explicit Business Owner direction
@@ -102,7 +104,7 @@ PM proposes:
 - risk/uncertainty
 - risk-reducing splits if justified
 
-Implementation begins only after Business Owner approval.
+Implementation begins after the applicable phase approval in WORKFLOW.md. During phase 3, approved development scope authorizes internal sprint planning and continued implementation without repeated owner gates. Phase 4 returns to owner-approved sprints.
 
 ## 9. Risk-based splitting
 
@@ -183,7 +185,7 @@ All approved Sprint Backlog items must be Done.
 
 Do not declare an arbitrary early milestone.
 
-At sprint completion:
+In phase 3, internal sprint completion triggers validation and continuation toward the full approved scope, not a routine owner stop. At full development milestone completion, or sprint completion in phase 4:
 1. stop feature work;
 2. stabilize build/tests;
 3. run demo scenarios;
@@ -218,6 +220,8 @@ Agents MUST NOT modify governing rules without explicit Business Owner approval.
 
 ## 20. Usage budget
 
+Current rule (D-P043, 2026-09-28, Claude agent team): stop at 70% of the Claude 5-hour or weekly limit. The PM reads usage live with the app's usage tool before every dispatch and at every checkpoint, then records a checkpoint and stops. Never use extra usage or buy credits. D-P041 is inactive. Historical note: owner decision D-P041 (2026-09-23) supersedes the thresholds below: continue approved work until the weekly allowance actually prevents work. Check usage during work, save an exact checkpoint at the limit, and never redeem or buy credits automatically. The thresholds below remain the standing policy outside this explicit exception.
+
 If reliable usage information is available:
 
 - <=70% used: normal operation.
@@ -229,7 +233,8 @@ At hard stop:
 - update backlog/logs;
 - commit safe completed work if appropriate;
 - record resume point;
-- stop agentic work until normal reset.
+- stop development until normal reset; lightweight usage checks may run to detect reset.
+- Resume automatically only when usage was the sole blocker, the limiting window has reset and all relevant windows are <=70%; never bypass phase/owner gates. Check usage before dispatch and at least every five minutes during active work. See WORKFLOW.md for the configured heartbeat.
 
 Do not automatically buy credits or switch to paid capacity.
 
@@ -237,3 +242,4 @@ Do not automatically buy credits or switch to paid capacity.
 
 No proposed scheduling change may alter the real schedule before explicit admin commit.
 Proposed batch state must remain distinguishable from committed schedule state.
+

@@ -1,0 +1,5 @@
+# Bundled PDF font
+
+`ClinicSansSC-Regular.ttf` is a static Regular-weight build of [NotoSansSC-VF.ttf from the official Noto CJK repository](https://github.com/notofonts/noto-cjk/blob/main/Sans/Variable/TTF/Subset/NotoSansSC-VF.ttf). The source SHA-256 is `D68BAFCB48A2707749396AA12BBBD833CB70401F3A9A689FD2902C7E0D295964`; the bundled static font SHA-256 is `E75A7D00F32AADF4FBD965BD5CDD366A044FA7988E7474DD6B2B5C7827A35401`. It was generated at weight 400 with fontTools 4.65.0, and its family name was changed to Clinic Sans SC to distinguish the modified font.
+
+The font is licensed under the [SIL Open Font License 1.1](https://github.com/notofonts/noto-cjk/blob/main/Sans/LICENSE); the complete license is preserved in `OFL-1.1.txt`. PDF generation embeds this bundled font, so it does not depend on fonts installed on the server or the reader's computer. The complete font is embedded because this PDF library's subsetting rendered CJK glyphs incorrectly; a short report is about 6.4 MB. Characters absent from the font cause an explicit report error instead of silently changing names.
