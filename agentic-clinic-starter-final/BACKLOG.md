@@ -905,3 +905,20 @@ Status: DONE (2026-09-29). 72/72 tests pass. QA ran a signed-in browser test on 
 Sprint: S7
 Dependencies: D-B020
 Discovery class: ADJACENT
+
+### US-018
+Type: STORY
+Title: Hardened public synthetic demo on Vercel and Neon (D-P046)
+Description: Deploy the signed-in app publicly with a shared demo login per pod and nightly resets, so that strangers cannot lock others out or take over the demo.
+Source / reason: Owner decision D-P046, 2026-10-07 (portfolio and job-search demo)
+Acceptance criteria: Under a PUBLIC_DEMO=1 flag, which is separate from the sign-in-bypassing CLINIC_DEMO_MODE:
+- Sign-in stays required.
+- Account-management actions are blocked: password, email and name changes, password reset, and the admin user-management endpoints.
+- The config page is read-only.
+- A visible banner says "synthetic data, resets nightly".
+A secret-protected reset endpoint re-creates the auth tables if missing, reseeds the clinic with the synthetic demo, re-creates the two demo admins (Maple and Cedar) with the password taken from environment configuration, and removes other users and sessions. A Vercel cron calls it daily. DEPLOY.md documents every Vercel and Neon step and environment variable. Tests cover the blocked endpoints, the reset auth and its effects, and that nothing activates without the flag. The existing suite and build stay green.
+Priority: P1
+Status: READY
+Sprint: Post-M3
+Dependencies: D-P046, M3
+Discovery class: ADJACENT
