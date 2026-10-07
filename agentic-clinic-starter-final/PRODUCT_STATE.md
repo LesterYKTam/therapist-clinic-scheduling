@@ -221,3 +221,16 @@ Tagged milestone/M3 and merged to master. The owner then directed:
 - a public GitHub repo, LesterYKTam/therapist-clinic-scheduling;
 - a public demo on Vercel and Neon with a shared demo login (option a) and a nightly data reset.
 This lifts the UAT hold for a synthetic-data public demo only. Real client data stays prohibited. Next: harden the app for the public demo, then deploy.
+
+## 2026-10-07 — public demo live (US-018, D-P046)
+- **Site:** https://therapist-clinic-scheduling.vercel.app, on Vercel Hobby with Neon `clinic-demo` (AWS us-east-1, pooled).
+- **Mode:** PUBLIC_DEMO=1. Sign-in is required, with demo logins maple@demo.clinic and cedar@demo.clinic. The shared password is published in README.md at the owner's request.
+- **Bootstrap:** completed, giving revision 1 with 430 sessions.
+- **Nightly reset:** Vercel cron `0 7 * * *` on /api/demo/reset is registered and enabled.
+- **Live unauthenticated checks pass:** sign-in redirect, banner, security headers, 401 clinic API, 403 change-password/admin/sign-up, 401 reset without secret, 401 wrong password.
+- **Signed-in live check:** pending by the owner. Agents may not authenticate to a public site.
+- **Secrets:** they live only in Vercel and in the git-ignored `.local/vercel.env` and `.local/uat.env`.
+- **GitHub:** public at LesterYKTam/therapist-clinic-scheduling, `master` is pushed, and the milestone tags are pushed.
+
+Next (portfolio polish, owner-approved): README screenshots captured from local DEV on :3001, an AGENTIC_WORKFLOW.md case study, then a UX polish sprint and DEBT-001.
+Paused at 68% of the 5-hour usage limit (D-P043). Resume after the reset at 2026-10-07 23:30 UTC.
