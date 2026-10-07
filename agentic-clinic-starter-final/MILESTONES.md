@@ -1,6 +1,6 @@
 # Milestones
 
-Current approved milestone: M1
+Current approved milestone: M3
 
 ## M1 — Read-only pod schedule
 Approved by Business Owner: 2026-09-14
@@ -23,3 +23,17 @@ UX-001–005 implemented and verified as a complete interactive prototype; see S
 Approved by Business Owner: 2026-09-15 (D-P035).
 Git tag: milestone/M2.
 Accepted scope: UX-001–009, connected Calendar, conflict workflow, Add session/weekly UI, Setup, committed-only report UI. Prototype limitations retained; operational scheduling correctness is not certified. S2 files preserved without separate retrospective acceptance. S4 planning authorized.
+
+## M3 — Leave-disruption workflow, admin access and S7 fixes
+Approved by Business Owner: 2026-10-07.
+Git tag: milestone/M3.
+Accepted scope: the complete approved requirements baseline.
+- Leave becomes conflicts, and historical alerts no longer block.
+- Bounded Auto resolve, including 2nd- and 3rd-rank holders.
+- The shared draft supports apply, edit, remove change, atomic commit and discard.
+- Grouped notification tasks.
+- Two-admin sign-in, editing limited to the assigned pod, with a read-only view of all pods.
+- Performance at clinic scale.
+- The first-admin CLI tool and the synthetic demo seed.
+Evidence: SPRINT_7_REVIEW.md. 75/75 tests and the build pass, and QA end-to-end acceptance steps A–J pass.
+Excluded: UAT/production hosting with real data, Google Calendar integration, the DEBT-001 cleanup and the UX polish list.

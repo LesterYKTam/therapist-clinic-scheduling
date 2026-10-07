@@ -313,3 +313,8 @@ For a session held by the 3rd-ranked therapist, the major is the first alternati
 Status: APPROVED by explicit owner answer, 2026-09-29 (supersedes the read side of D-B009/D-B010 and the redaction rule behind BUG-015/BUG-017)
 
 Every admin may view every pod's records read-only. Other pods' names, bookings and details need not be hidden or redacted. Changes to people, leave, sessions and drafts remain limited to the admin's currently assigned pod, and clinic-wide rooms and config remain editable by any admin (D-B010). The exact UI scope is being confirmed with the owner (see PRODUCT_STATE).
+
+## D-P046 — M3 approved; public repository and public synthetic demo
+Status: APPROVED by explicit owner instruction, 2026-10-07
+
+The owner approved M3, which is tagged milestone/M3 and merged to master. The repository is public on GitHub at LesterYKTam/therapist-clinic-scheduling. A public demo is deployed on Vercel with a Neon PostgreSQL database, using synthetic data only, with a shared demo login published in the README and data that resets nightly. The owner creates and controls the Vercel and Neon accounts. This lifts the UAT hold only for a synthetic public demo; real client data remains prohibited until a later owner decision.

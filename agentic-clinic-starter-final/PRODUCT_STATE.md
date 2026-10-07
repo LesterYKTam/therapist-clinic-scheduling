@@ -215,3 +215,9 @@ All approved scope is DONE internally. The review, with the owner test script, i
 - The owner's DEV admin is admin@demo.com, assigned to Maple.
 - Sites: localhost:3000 is the demo that skips sign-in; localhost:3001 is signed-in (`next start` with demo mode off).
 - Waiting for the owner's decision: APPROVE / CHANGE / REJECT / EXPERIMENT. On APPROVE: tag milestone/M3, merge to master, and propose the UX polish, then DEBT-001, then UAT planning. UAT stays held until then.
+
+## 2026-10-07 — M3 APPROVED by the owner
+Tagged milestone/M3 and merged to master. The owner then directed:
+- a public GitHub repo, LesterYKTam/therapist-clinic-scheduling;
+- a public demo on Vercel and Neon with a shared demo login (option a) and a nightly data reset.
+This lifts the UAT hold for a synthetic-data public demo only. Real client data stays prohibited. Next: harden the app for the public demo, then deploy.
