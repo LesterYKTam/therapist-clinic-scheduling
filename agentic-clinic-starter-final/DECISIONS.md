@@ -318,3 +318,8 @@ Every admin may view every pod's records read-only. Other pods' names, bookings 
 Status: APPROVED by explicit owner instruction, 2026-10-07
 
 The owner approved M3, which is tagged milestone/M3 and merged to master. The repository is public on GitHub at LesterYKTam/therapist-clinic-scheduling. A public demo is deployed on Vercel with a Neon PostgreSQL database, using synthetic data only, with a shared demo login published in the README and data that resets nightly. The owner creates and controls the Vercel and Neon accounts. This lifts the UAT hold only for a synthetic public demo; real client data remains prohibited until a later owner decision.
+
+## D-P047 — One-time override of the 70% usage stop
+Status: APPROVED by explicit owner instruction, 2026-10-07
+
+The owner directed that the portfolio polish (README screenshots and the AGENTIC_WORKFLOW.md case study) be completed now, despite the 5-hour window being at 68%. Extra paid usage is disabled on the account, so no paid overage is possible. D-P043 resumes as the standing rule after this task.

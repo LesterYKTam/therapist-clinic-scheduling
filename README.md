@@ -6,6 +6,17 @@ A scheduling system for a therapy clinic. It keeps every client's recurring sess
 > Sign in as `maple@demo.clinic` (Maple pod) or `cedar@demo.clinic` (Cedar pod) with password `Demo!123`. Each can edit its own pod and view the other read-only.
 > All data in this repository and in the demo is **synthetic**, with no real clients or staff. The demo resets every night.
 
+## Screenshots
+
+**A therapist's leave appears as conflicts beside the week's schedule:**
+![Calendar with leave conflicts](docs/images/01-calendar-conflicts.png)
+
+**Auto resolve proposes safe reassignments with a reason for each. Nothing is committed until the admin approves:**
+![Auto resolve proposal](docs/images/02-auto-resolve-proposal.png)
+
+**Each admin edits only their own pod and can view the other read-only:**
+![Read-only view of another pod](docs/images/03-read-only-other-pod.png)
+
 ## What it does
 
 - **Pods and ranked therapists.** Each client has a major, 2nd and 3rd therapist, all from the same pod. Only these three may ever hold the client's sessions.
@@ -119,6 +130,8 @@ flowchart LR
 - **The human stays in the loop for the right things.** I was asked about business rules, such as which session to move first, whether history should block scheduling, and who may see what. Implementation choices were left to the agents.
 
 Every requirement, decision and bug is traceable in `SPEC.md`, `DECISIONS.md`, `BACKLOG.md` and the sprint reviews.
+
+**For the full story, see the case study: [AGENTIC_WORKFLOW.md](AGENTIC_WORKFLOW.md).** It covers roles and limits, the AI-to-AI handoff, the specific problems the process caught, and what I'd do differently.
 
 ## Status
 
