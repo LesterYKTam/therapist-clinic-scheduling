@@ -2,8 +2,9 @@
 
 A scheduling system for a therapy clinic. It keeps every client's recurring sessions correctly staffed, and it reorganises affected sessions safely when a therapist is on leave. **The real schedule never changes without an admin's explicit commit.**
 
-> **Live demo:** _coming soon_
-> All data in this repository and in the demo is **synthetic**. No real clients or staff.
+> **Live demo: https://therapist-clinic-scheduling.vercel.app**
+> Sign in as `maple@demo.clinic` (Maple pod) or `cedar@demo.clinic` (Cedar pod). Each can edit its own pod and view the other read-only.
+> All data in this repository and in the demo is **synthetic**, with no real clients or staff. The demo resets every night.
 
 ## What it does
 
