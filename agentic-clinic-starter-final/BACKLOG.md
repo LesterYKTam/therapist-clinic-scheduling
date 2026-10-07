@@ -918,7 +918,7 @@ Acceptance criteria: Under a PUBLIC_DEMO=1 flag, which is separate from the sign
 - A visible banner says "synthetic data, resets nightly".
 A secret-protected reset endpoint re-creates the auth tables if missing, reseeds the clinic with the synthetic demo, re-creates the two demo admins (Maple and Cedar) with the password taken from environment configuration, and removes other users and sessions. A Vercel cron calls it daily. DEPLOY.md documents every Vercel and Neon step and environment variable. Tests cover the blocked endpoints, the reset auth and its effects, and that nothing activates without the flag. The existing suite and build stay green.
 Priority: P1
-Status: READY
+Status: DONE (2026-10-07). 89/89 tests pass. QA security check: about 120 bypass attempts on the auth allowlist all failed, the reset endpoint is solid, and the browser workflow works. QA finding D1 (unbounded payloads) is fixed with size guardrails in all modes; security headers and PDF font tracing were added.
 Sprint: Post-M3
 Dependencies: D-P046, M3
 Discovery class: ADJACENT

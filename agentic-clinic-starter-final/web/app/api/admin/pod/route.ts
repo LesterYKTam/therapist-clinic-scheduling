@@ -1,8 +1,12 @@
 // @ts-expect-error JavaScript store is covered by isolated PostgreSQL tests.
 import { PostgresClinicStore } from "../../../../lib/clinic-store.mjs";
 
+// @ts-expect-error JavaScript helper is covered by the isolated PostgreSQL suite.
+import { isPublicDemo, publicDemoRefusal } from "../../../../lib/public-demo.mjs";
+
 export async function POST(request: Request) {
-  const { auth, authPool } = await import("../../../../lib/auth");
+  if (isPublicDemo()) return publicDemoRefusal();
+  const { auth, authPool } = await import("../../../../lib/auth.ts");
   const session = await auth.api.getSession({ headers: request.headers });
   if (!session || session.user.role !== "admin") return Response.json({ error: "Admin sign in required." }, { status: 401 });
   let body: { userId?: unknown; podId?: unknown };

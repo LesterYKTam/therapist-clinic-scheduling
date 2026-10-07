@@ -499,6 +499,22 @@ export function notificationItems(task) {
   return task.sessionId?[{sessionId:task.sessionId,changeType:task.changeType,before:task.before,after:task.after}]:[];
 }
 
+export const LIMITS = { nameLength: 120, rooms: 50, therapists: 200, clients: 1000, leavesPerTherapist: 500 };
+function enforceSizeLimits(data) {
+  const L = LIMITS;
+  if (data.rooms.length > L.rooms) throw new ClinicRuleError(`At most ${L.rooms} rooms are allowed.`);
+  if (data.therapists.length > L.therapists) throw new ClinicRuleError(`At most ${L.therapists} therapists are allowed.`);
+  if (data.clients.length > L.clients) throw new ClinicRuleError(`At most ${L.clients} clients are allowed.`);
+  for (const [label, list] of [['Pod', data.pods], ['Therapist', data.therapists], ['Client', data.clients], ['Room', data.rooms]]) {
+    for (const item of list) {
+      if (typeof item.name === 'string' && item.name.length > L.nameLength) throw new ClinicRuleError(`${label} names can be at most ${L.nameLength} characters.`);
+      if (typeof item.id === 'string' && item.id.length > L.nameLength) throw new ClinicRuleError(`${label} identifiers can be at most ${L.nameLength} characters.`);
+    }
+  }
+  const perTherapist = new Map();
+  for (const leave of data.leaves) { const n = (perTherapist.get(leave.therapist) || 0) + 1; if (n > L.leavesPerTherapist) throw new ClinicRuleError(`At most ${L.leavesPerTherapist} leave entries are allowed per therapist.`); perTherapist.set(leave.therapist, n); }
+}
+
 export function validateState(data, {allowHistoric = true} = {}) {
   if (!data || data.schema !== 2 || !Number.isInteger(data.revision) || data.revision < 0) throw new ClinicRuleError('Unsupported clinic data.');
   const c = data.config;
@@ -511,6 +527,7 @@ export function validateState(data, {allowHistoric = true} = {}) {
   data.drafts ??= []; // One shared unfinished draft per pod, added after S5.
   data.notifications ??= []; // Existing S4 snapshots predate the notification worklist.
   for (const key of ['pods','therapists','clients','rooms','series','sessions','leaves','drafts','notifications']) if (!Array.isArray(data[key]) || new Set(data[key].map(x => x.id)).size !== data[key].length) throw new ClinicRuleError(`Invalid or duplicate ${key} records.`);
+  enforceSizeLimits(data);
   for (const task of data.notifications) {
     // Old per-session tasks carry one session inline; grouped tasks (D-B016) carry `items`.
     const items=notificationItems(task);

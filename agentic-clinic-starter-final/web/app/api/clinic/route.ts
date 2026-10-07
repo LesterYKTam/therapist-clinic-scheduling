@@ -10,6 +10,8 @@ import { authorizeClinicAction, mergePodSetup } from "../../../lib/clinic-access
 
 // @ts-expect-error Demo-mode guard is exercised by the Node suite.
 import { demoModeGate } from "../../../lib/demo-mode.mjs";
+// @ts-expect-error Body limit helper is exercised by the Node suite.
+import { readJsonLimited, BodyTooLargeError } from "../../../lib/body-limit.mjs";
 // @ts-expect-error Rule-error classification is exercised by the Node suite.
 import { isClinicRuleError } from "../../../lib/clinic-error.mjs";
 
@@ -74,7 +76,7 @@ export async function POST(request: NextRequest) {
   let podId: string | null = null;
   let setupChange: any;
   try {
-    const body = await request.json();
+    const body = await readJsonLimited(request);
     if (demo) clinic = store();
     else {
       const { auth } = await import("../../../lib/auth.ts");
@@ -116,6 +118,9 @@ export async function POST(request: NextRequest) {
     if (body.action === "commit-draft") return await actionResponse(clinic.commitDraft(String(body.pod || ""), Number(body.revision)));
     if (body.action === "handle-notification") return await actionResponse(clinic.handleNotification(String(body.pod || ""), String(body.taskId || ""), Number(body.revision)));
     return response({ error: "Unknown action." }, 400);
-  } catch (caught) { return demo ? error(caught) : actionFailure(caught); }
+  } catch (caught) {
+    if (caught instanceof BodyTooLargeError) return response({ error: (caught as Error).message }, 413);
+    return demo ? error(caught) : actionFailure(caught);
+  }
   finally { await clinic?.close(); }
 }

@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS clinic_state (
 export class PostgresClinicStore {
   constructor(connectionString = process.env.DATABASE_URL, actor = null) {
     if (!connectionString) throw new Error('DATABASE_URL is not configured.');
-    this.pool = new pg.Pool({ connectionString, max: 8, connectionTimeoutMillis: 3000, statement_timeout: 8000 });
+    this.pool = new pg.Pool({ connectionString, max: Number(process.env.DB_POOL_MAX) || (process.env.VERCEL ? 3 : 8), idleTimeoutMillis: process.env.VERCEL ? 10000 : 30000, connectionTimeoutMillis: 3000, statement_timeout: 8000 });
     this.actor = actor;
   }
 

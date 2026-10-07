@@ -3,6 +3,9 @@
   "private": true,
   "type": "module",
   "version": "0.1.0",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "dotenv -e ../.local/dev.env -- next dev --port 3000",
     "build": "next build",
