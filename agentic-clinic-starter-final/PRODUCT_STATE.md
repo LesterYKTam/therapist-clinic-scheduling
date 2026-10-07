@@ -234,3 +234,7 @@ This lifts the UAT hold for a synthetic-data public demo only. Real client data 
 
 Next (portfolio polish, owner-approved): README screenshots captured from local DEV on :3001, an AGENTIC_WORKFLOW.md case study, then a UX polish sprint and DEBT-001.
 Paused at 68% of the 5-hour usage limit (D-P043). Resume after the reset at 2026-10-07 23:30 UTC.
+
+## 2026-10-07 — live demo verified by the owner
+The owner signed in to the live public demo and confirmed the staff report and PDF download work on Vercel, which also confirms PDF font tracing in production. This closes the signed-in live check left open on US-018. The portfolio deliverables are complete: public repo, recruiter README with screenshots, the AGENTIC_WORKFLOW.md case study, and the live demo.
+Backlog for later: the UX polish list (SPRINT_7_REVIEW.md), DEBT-001, and Google Calendar migration/integration discovery.
