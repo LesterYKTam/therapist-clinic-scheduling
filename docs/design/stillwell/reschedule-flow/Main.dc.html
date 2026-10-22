@@ -1,0 +1,445 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Stillwell calendar: resolve a conflict</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#f7f9f8;color:#1f2a2a;font-family:Inter,"Segoe UI",system-ui,sans-serif;font-size:14px;line-height:20px}
+a{color:#2f7f7a}a:hover{color:#266a66}
+button{font-family:inherit;font-size:14px;cursor:pointer}
+button:focus-visible{outline:2px solid #2f7f7a;outline-offset:2px}
+.tnum{font-variant-numeric:tabular-nums}
+</style>
+</helmet>
+<div style="min-height: 100vh; display: flex; flex-wrap: wrap; background: #f7f9f8;">
+
+  <nav aria-label="Main" style="flex: 1 1 200px; max-width: 220px; box-sizing: border-box; padding: 24px 16px; background: #eef2f1; border-right: 1px solid #d9e1df; display: flex; flex-direction: column; gap: 4px;">
+    <div style="font-size: 20px; line-height: 28px; font-weight: 700; padding: 0 8px;">Stillwell</div>
+    <div style="font-size: 12px; line-height: 16px; color: #5b6b69; padding: 0 8px 20px;">Maple pod · Admin</div>
+    <a href="#" style="display: block; padding: 8px 12px; border-radius: 6px; background: #e3f0ee; color: #1d5e59; font-weight: 600; text-decoration: none;">Calendar</a>
+    <a href="#" style="display: block; padding: 8px 12px; border-radius: 6px; color: #1f2a2a; text-decoration: none;">Setup</a>
+    <a href="#" style="display: block; padding: 8px 12px; border-radius: 6px; color: #1f2a2a; text-decoration: none;">Reports</a>
+    <a href="#" style="display: block; padding: 8px 12px; border-radius: 6px; color: #1f2a2a; text-decoration: none;">Admin configuration</a>
+  </nav>
+
+  <main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 24px; display: flex; flex-direction: column; gap: 16px;">
+
+    <header style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px;">
+      <h1 style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 600;">Calendar</h1>
+      <div style="display: flex; gap: 4px; padding: 3px; background: #eef2f1; border-radius: 6px;">
+        <button style="border: 0; border-radius: 4px; padding: 4px 12px; background: #ffffff; color: #1f2a2a; font-weight: 600;">Day by therapist</button>
+        <button style="border: 0; border-radius: 4px; padding: 4px 12px; background: transparent; color: #5b6b69;">Week</button>
+      </div>
+      <div style="display: flex; align-items: center; gap: 4px;">
+        <button aria-label="Previous day" style="border: 1px solid #7d8e8b; background: #ffffff; border-radius: 6px; width: 32px; height: 32px; color: #1f2a2a;">‹</button>
+        <span class="tnum" style="font-weight: 600; padding: 0 8px;">Tue, Oct 27</span>
+        <button aria-label="Next day" style="border: 1px solid #7d8e8b; background: #ffffff; border-radius: 6px; width: 32px; height: 32px; color: #1f2a2a;">›</button>
+      </div>
+      <div style="flex: 1 1 auto;"></div>
+      <sc-if value="{{hasOpen}}" hint-placeholder-val="{{ true }}">
+        <span style="background: #fbebdd; color: #8a4a12; border-radius: 4px; padding: 4px 10px; font-size: 12px; font-weight: 600;">{{openLabel}}</span>
+      </sc-if>
+      <button style="border: 1px solid #7d8e8b; background: #ffffff; color: #1f2a2a; border-radius: 6px; padding: 6px 14px;">Record leave</button>
+      <button style="border: 0; background: #2f7f7a; color: #ffffff; border-radius: 6px; padding: 7px 14px; font-weight: 600;">Add session</button>
+    </header>
+
+    <sc-if value="{{showDone}}" hint-placeholder-val="{{ false }}">
+      <div role="status" style="background: #ffffff; border: 1px solid #d9e1df; border-radius: 8px; padding: 12px 16px; display: flex; gap: 12px; align-items: center;">
+        <span style="color: #2e7d4f; font-weight: 600;">{{doneLabel}}</span>
+        <span style="color: #5b6b69;">Notification tasks were added to the worklist. Nothing is sent automatically.</span>
+      </div>
+    </sc-if>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start;">
+
+      <section aria-label="Day schedule by therapist" style="flex: 999 1 520px; min-width: 0; background: #ffffff; border: 1px solid #d9e1df; border-radius: 8px; overflow-x: auto;">
+        <div style="min-width: 520px;">
+          <div style="display: grid; grid-template-columns: 64px repeat(3, minmax(0, 1fr)); border-bottom: 1px solid #d9e1df; background: #eef2f1;">
+            <div></div>
+            <sc-for list="{{cols}}" as="col" hint-placeholder-count="3">
+              <div style="padding: 10px 12px; border-left: 1px solid #d9e1df;">
+                <div style="font-weight: 600;">{{col.name}}</div>
+                <div style="font-size: 12px; line-height: 16px; color: {{col.subColor}};">{{col.sub}}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display: grid; grid-template-columns: 64px repeat(3, minmax(0, 1fr)); position: relative;">
+            <div>
+              <sc-for list="{{hours}}" as="hr" hint-placeholder-count="9">
+                <div class="tnum" style="height: 64px; box-sizing: border-box; padding: 4px 8px 0 0; text-align: right; font-size: 12px; color: #5b6b69; border-top: 1px solid #eef2f1;">{{hr.label}}</div>
+              </sc-for>
+            </div>
+            <sc-for list="{{cols}}" as="col" hint-placeholder-count="3">
+              <div style="position: relative; height: 576px; border-left: 1px solid #d9e1df; background: {{col.bg}};">
+                <sc-for list="{{hours}}" as="hr" hint-placeholder-count="9">
+                  <div style="height: 64px; box-sizing: border-box; border-top: 1px solid #eef2f1;"></div>
+                </sc-for>
+                <sc-for list="{{col.cards}}" as="card" hint-placeholder-count="3">
+                  <button onClick="{{card.onPick}}" aria-label="{{card.aria}}" style="position: absolute; top: {{card.top}}px; left: 6px; right: 6px; height: 58px; box-sizing: border-box; padding: 6px 8px; text-align: left; border-radius: 4px; background: {{card.bg}}; border: 1px {{card.bstyle}} {{card.bc}}; color: #1f2a2a; opacity: {{card.op}}; box-shadow: {{card.ring}}; display: flex; flex-direction: column; gap: 2px; overflow: hidden;">
+                    <span style="display: flex; justify-content: space-between; gap: 6px; font-size: 12px; line-height: 16px;">
+                      <span class="tnum" style="font-weight: 500; text-decoration: {{card.strike}};">{{card.time}}</span>
+                      <span style="font-weight: 600; color: {{card.fg}};">{{card.pill}}</span>
+                    </span>
+                    <span style="font-size: 13px; line-height: 18px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{card.client}}</span>
+                    <span style="font-size: 12px; line-height: 16px; color: #5b6b69; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{card.meta}}</span>
+                  </button>
+                </sc-for>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </section>
+
+      <aside aria-label="Conflicts and changes" style="flex: 1 1 360px; max-width: 420px; min-width: 0; display: flex; flex-direction: column; gap: 12px;">
+
+        <sc-if value="{{showList}}" hint-placeholder-val="{{ true }}">
+          <section style="background: #ffffff; border: 1px solid #d9e1df; border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 12px;">
+            <div>
+              <h2 style="margin: 0; font-size: 16px; line-height: 24px; font-weight: 600;">Conflicts</h2>
+              <div style="font-size: 12px; line-height: 16px; color: #5b6b69;">Morgan Testerson is on leave Tue, Oct 27 – Wed, Oct 28</div>
+            </div>
+            <sc-if value="{{hasOpen}}" hint-placeholder-val="{{ true }}">
+              <div style="display: flex; flex-direction: column; gap: 8px;">
+                <sc-for list="{{openList}}" as="c" hint-placeholder-count="3">
+                  <button onClick="{{c.onPick}}" style="display: flex; align-items: center; gap: 12px; text-align: left; background: #fbebdd; border: 1px solid #e8c9ad; border-radius: 4px; padding: 10px 12px; color: #1f2a2a;">
+                    <span class="tnum" style="font-weight: 500; width: 48px;">{{c.time}}</span>
+                    <span style="flex: 1 1 auto; display: flex; flex-direction: column;">
+                      <span style="font-weight: 600;">{{c.client}}</span>
+                      <span style="font-size: 12px; line-height: 16px; color: #5b6b69;">{{c.room}} · with Morgan T.</span>
+                    </span>
+                    <span style="font-size: 12px; font-weight: 600; color: #8a4a12;">Resolve ›</span>
+                  </button>
+                </sc-for>
+              </div>
+              <div style="font-size: 12px; line-height: 16px; color: #5b6b69;">2 more on Wed, Oct 28. They appear when you open that day.</div>
+            </sc-if>
+            <sc-if value="{{noOpen}}" hint-placeholder-val="{{ false }}">
+              <div style="color: #2e7d4f; font-weight: 600;">No open conflicts on this day.</div>
+            </sc-if>
+          </section>
+        </sc-if>
+
+        <sc-if value="{{showDetail}}" hint-placeholder-val="{{ false }}">
+          <section style="background: #ffffff; border: 1px solid #d9e1df; border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 16px;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <button onClick="{{back}}" style="border: 0; background: transparent; color: #2f7f7a; padding: 0; font-weight: 500;">‹ All conflicts</button>
+              <span style="font-size: 12px; color: #5b6b69;">{{progress}}</span>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+              <span style="align-self: flex-start; background: #fbebdd; color: #8a4a12; border-radius: 4px; padding: 2px 8px; font-size: 12px; font-weight: 600;">Conflict</span>
+              <h2 style="margin: 0; font-size: 16px; line-height: 24px; font-weight: 600;">{{d.client}}</h2>
+              <div class="tnum">{{d.when}}</div>
+              <div style="font-size: 12px; line-height: 16px; color: #5b6b69;">Morgan Testerson is on leave. Weekly series; this change applies to this session only.</div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px;">
+              <div style="background: #f7f9f8; border-radius: 4px; padding: 8px;">
+                <div style="font-size: 12px; font-weight: 500; color: #5b6b69;">Client</div>
+                <div style="font-size: 12px; line-height: 16px;">{{d.clientInfo}}</div>
+              </div>
+              <div style="background: #f7f9f8; border-radius: 4px; padding: 8px;">
+                <div style="font-size: 12px; font-weight: 500; color: #5b6b69;">{{d.atLabel}}</div>
+                <sc-for list="{{d.tAt}}" as="t" hint-placeholder-count="3">
+                  <div style="font-size: 12px; line-height: 16px;"><span style="font-weight: 600;">{{t.name}}</span> <span style="color: {{t.color}};">{{t.state}}</span></div>
+                </sc-for>
+              </div>
+              <div style="background: #f7f9f8; border-radius: 4px; padding: 8px;">
+                <div style="font-size: 12px; font-weight: 500; color: #5b6b69;">Rooms free</div>
+                <div style="font-size: 12px; line-height: 16px;">{{d.roomsFree}}</div>
+              </div>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+              <h3 style="margin: 0; font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: 0.02em; color: #5b6b69;">OPTIONS · SELECT ONE TO PREVIEW</h3>
+              <sc-for list="{{d.options}}" as="o" hint-placeholder-count="3">
+                <button onClick="{{o.onPick}}" aria-pressed="{{o.pressed}}" style="display: flex; flex-direction: column; gap: 6px; text-align: left; background: #ffffff; border: {{o.border}}; border-radius: 8px; padding: 12px; color: #1f2a2a; box-shadow: {{o.ring}};">
+                  <span style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+                    <span style="font-weight: 600;">{{o.title}}</span>
+                    <span style="font-size: 12px; font-weight: 600; color: #1d5e59; background: #e3f0ee; border-radius: 4px; padding: 1px 6px;">{{o.tag}}</span>
+                  </span>
+                  <span style="display: flex; flex-direction: column; gap: 2px; font-size: 12px; line-height: 16px;">
+                    <span><span style="color: #5b6b69;">Fit</span> <span style="color: {{o.fitColor}}; font-weight: 500;">{{o.fit}}</span></span>
+                    <span><span style="color: #5b6b69;">Availability</span> <span style="color: {{o.availColor}}; font-weight: 500;">{{o.avail}}</span></span>
+                    <span><span style="color: #5b6b69;">Room</span> <span style="color: #2e7d4f; font-weight: 500;">{{o.room}}</span></span>
+                  </span>
+                  <span style="display: flex; flex-direction: column; gap: 2px; border-top: 1px solid #eef2f1; padding-top: 6px;">
+                    <sc-for list="{{o.steps}}" as="s" hint-placeholder-count="1">
+                      <span class="tnum" style="font-size: 12px; line-height: 16px;">{{s.n}}. {{s.text}}</span>
+                    </sc-for>
+                  </span>
+                </button>
+              </sc-for>
+            </div>
+
+            <div style="display: flex; gap: 8px;">
+              <button onClick="{{stage}}" disabled="{{noOpt}}" style="flex: 1 1 auto; border: 0; border-radius: 6px; padding: 9px 14px; font-weight: 600; background: {{stageBg}}; color: {{stageFg}};">{{stageLabel}}</button>
+              <button onClick="{{back}}" style="border: 1px solid #7d8e8b; background: #ffffff; color: #1f2a2a; border-radius: 6px; padding: 8px 14px;">Skip</button>
+            </div>
+          </section>
+        </sc-if>
+
+        <sc-if value="{{hasStaged}}" hint-placeholder-val="{{ false }}">
+          <section aria-label="Draft changes" style="background: #e6eef8; border: 1px dashed #2b5a8f; border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 10px;">
+            <div style="display: flex; justify-content: space-between; align-items: baseline;">
+              <h2 style="margin: 0; font-size: 16px; line-height: 24px; font-weight: 600; color: #1f2a2a;">Draft</h2>
+              <span style="font-size: 12px; color: #2b5a8f; font-weight: 600;">{{stagedCount}}</span>
+            </div>
+            <div style="font-size: 12px; line-height: 16px; color: #2b5a8f;">Not saved yet. Nothing changes for clients or therapists until you commit.</div>
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+              <sc-for list="{{stagedList}}" as="s" hint-placeholder-count="2">
+                <div class="tnum" style="font-size: 12px; line-height: 16px; background: #ffffff; border-radius: 4px; padding: 6px 8px;">{{s.text}}</div>
+              </sc-for>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button onClick="{{commit}}" style="flex: 1 1 auto; border: 0; border-radius: 6px; padding: 9px 14px; font-weight: 600; background: #2f7f7a; color: #ffffff;">{{commitLabel}}</button>
+              <button onClick="{{discard}}" style="border: 1px solid #7d8e8b; background: #ffffff; color: #1f2a2a; border-radius: 6px; padding: 8px 14px;">Discard</button>
+            </div>
+          </section>
+        </sc-if>
+
+      </aside>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = {
+      sessions: [
+        { id: 's1', client: 'Alex Sampleton', t: 'morgan', h: 9, room: 'Room 1' },
+        { id: 's2', client: 'Bailey Sampleton', t: 'morgan', h: 11, room: 'Room 1' },
+        { id: 's3', client: 'Charlie Sampleton', t: 'morgan', h: 13, room: 'Room 1' },
+        { id: 's4', client: 'Gray Sampleton', t: 'taylor', h: 10, room: 'Room 2' },
+        { id: 's5', client: 'Frankie Sampleton', t: 'taylor', h: 13, room: 'Room 2' },
+        { id: 's6', client: 'Harper Sampleton', t: 'taylor', h: 15, room: 'Room 2' },
+        { id: 's7', client: 'Jules Sampleton', t: 'casey', h: 9, room: 'Room 3' },
+        { id: 's8', client: 'Dana Sampleton', t: 'casey', h: 11, room: 'Room 3' },
+        { id: 's9', client: 'Indigo Sampleton', t: 'casey', h: 15, room: 'Room 3' }
+      ],
+      sel: null, opt: null, staged: [], done: 0
+    };
+  }
+
+  ther() {
+    return {
+      morgan: { name: 'Morgan Testerson', short: 'Morgan T.' },
+      taylor: { name: 'Taylor Testerson', short: 'Taylor T.' },
+      casey: { name: 'Casey Testerson', short: 'Casey T.' }
+    };
+  }
+
+  info() {
+    return {
+      s1: 'Weekly with Morgan. Has seen Casey 8 times.',
+      s2: 'Weekly with Morgan. Has seen Taylor 4 times.',
+      s3: 'Weekly with Morgan. Has seen Taylor 5 times.'
+    };
+  }
+
+  opts() {
+    return {
+      s1: [
+        { id: 'a', title: 'Casey takes this session', tag: 'Best fit', fit: 'Seen Alex 8 times', good: true, avail: 'Busy at 09:00, needs 1 more change', availOk: false, room: 'Room 1 stays',
+          changes: [ { sid: 's1', to: 'casey', h: 9, room: 'Room 1', text: 'Alex Sampleton → Casey T., 09:00, Room 1' },
+                     { sid: 's7', to: 'taylor', h: 9, room: 'Room 3', text: 'Jules Sampleton → Taylor T., 09:00, Room 3 (seen Taylor 2 times)' } ] },
+        { id: 'b', title: 'Taylor takes this session', tag: 'Fewest changes', fit: 'First session with Alex', good: false, avail: 'Free 09:00 – 10:00', availOk: true, room: 'Room 1 stays',
+          changes: [ { sid: 's1', to: 'taylor', h: 9, room: 'Room 1', text: 'Alex Sampleton → Taylor T., 09:00, Room 1' } ] },
+        { id: 'c', title: 'Cancel this session', tag: 'Last resort', fit: 'Client misses this week', good: false, avail: 'No therapist needed', availOk: true, room: 'Room 1 freed',
+          changes: [ { sid: 's1', cancel: true, text: 'Cancel Alex Sampleton, 09:00' } ] }
+      ],
+      s2: [
+        { id: 'a', title: 'Taylor takes this session', tag: 'Best fit', fit: 'Seen Bailey 4 times', good: true, avail: 'Free 11:00 – 12:00', availOk: true, room: 'Room 1 stays',
+          changes: [ { sid: 's2', to: 'taylor', h: 11, room: 'Room 1', text: 'Bailey Sampleton → Taylor T., 11:00, Room 1' } ] },
+        { id: 'b', title: 'Casey takes this session', tag: 'Alternative', fit: 'First session with Bailey', good: false, avail: 'Busy at 11:00, needs 1 more change', availOk: false, room: 'Room 1 stays',
+          changes: [ { sid: 's2', to: 'casey', h: 11, room: 'Room 1', text: 'Bailey Sampleton → Casey T., 11:00, Room 1' },
+                     { sid: 's8', to: 'casey', h: 16, room: 'Room 3', text: 'Dana Sampleton moves to 16:00 with Casey T., Room 3' } ] },
+        { id: 'c', title: 'Cancel this session', tag: 'Last resort', fit: 'Client misses this week', good: false, avail: 'No therapist needed', availOk: true, room: 'Room 1 freed',
+          changes: [ { sid: 's2', cancel: true, text: 'Cancel Bailey Sampleton, 11:00' } ] }
+      ],
+      s3: [
+        { id: 'a', title: 'Taylor takes this session', tag: 'Best fit', fit: 'Seen Charlie 5 times', good: true, avail: 'Busy at 13:00, needs 1 more change', availOk: false, room: 'Room 1 stays',
+          changes: [ { sid: 's3', to: 'taylor', h: 13, room: 'Room 1', text: 'Charlie Sampleton → Taylor T., 13:00, Room 1' },
+                     { sid: 's5', to: 'casey', h: 13, room: 'Room 2', text: 'Frankie Sampleton → Casey T., 13:00, Room 2 (first session)' } ] },
+        { id: 'b', title: 'Casey takes this session', tag: 'Fewest changes', fit: 'First session with Charlie', good: false, avail: 'Free 13:00 – 14:00', availOk: true, room: 'Room 1 stays',
+          changes: [ { sid: 's3', to: 'casey', h: 13, room: 'Room 1', text: 'Charlie Sampleton → Casey T., 13:00, Room 1' } ] },
+        { id: 'c', title: 'Cancel this session', tag: 'Last resort', fit: 'Client misses this week', good: false, avail: 'No therapist needed', availOk: true, room: 'Room 1 freed',
+          changes: [ { sid: 's3', cancel: true, text: 'Cancel Charlie Sampleton, 13:00' } ] }
+      ]
+    };
+  }
+
+  pad(h) { return (h < 10 ? '0' : '') + h + ':00'; }
+
+  openIds(staged) {
+    const touched = {};
+    staged.forEach((c) => { touched[c.conflictId] = true; });
+    return this.state.sessions.filter((s) => s.t === 'morgan' && !touched[s.id]).map((s) => s.id);
+  }
+
+  renderVals() {
+    const st = this.state;
+    const T = this.ther();
+    const OPTS = this.opts();
+    const pad = (h) => this.pad(h);
+    const open = this.openIds(st.staged);
+
+    let preview = [];
+    if (st.sel && st.opt) {
+      const o = OPTS[st.sel].find((x) => x.id === st.opt);
+      if (o) preview = o.changes;
+    }
+    const byS = {};
+    st.staged.forEach((c) => { byS[c.sid] = Object.assign({ kind: 'staged' }, c); });
+    preview.forEach((c) => { byS[c.sid] = Object.assign({ kind: 'preview' }, c); });
+
+    const ring = '0 0 0 2px #2f7f7a';
+    const colIds = ['morgan', 'taylor', 'casey'];
+    const cards = { morgan: [], taylor: [], casey: [] };
+    const sessionById = {};
+    st.sessions.forEach((s) => { sessionById[s.id] = s; });
+
+    const pick = (id) => () => { if (open.indexOf(id) >= 0) this.setState({ sel: id, opt: null }); };
+
+    st.sessions.forEach((s) => {
+      const c = byS[s.id];
+      const base = { client: s.client, time: pad(s.h), top: (s.h - 9) * 64 + 3, strike: 'none', ring: 'none', op: 1 };
+      if (!c) {
+        const isConf = s.t === 'morgan' && open.indexOf(s.id) >= 0;
+        cards[s.t].push(Object.assign(base, {
+          meta: s.room,
+          bg: isConf ? '#fbebdd' : '#ffffff', bc: isConf ? '#8a4a12' : '#d9e1df', bstyle: 'solid', fg: '#8a4a12',
+          pill: isConf ? 'Conflict' : '', ring: st.sel === s.id ? ring : 'none',
+          aria: s.client + ' ' + pad(s.h) + (isConf ? ', conflict' : ''), onPick: pick(s.id)
+        }));
+      } else if (c.cancel) {
+        cards[s.t].push(Object.assign(base, {
+          meta: s.room, bg: '#fae6e6', bc: '#9a2f2f', bstyle: 'dashed', fg: '#9a2f2f', strike: 'line-through',
+          pill: c.kind === 'preview' ? 'Preview: cancel' : 'Draft: cancel', ring: c.kind === 'preview' ? ring : 'none',
+          aria: s.client + ' cancelled in draft', onPick: pick(s.id)
+        }));
+      } else {
+        cards[s.t].push(Object.assign(base, {
+          meta: 'Moving to ' + T[c.to].short, bg: '#edf0ef', bc: '#7d8e8b', bstyle: 'dashed', fg: '#4f5d5b', op: 0.75,
+          pill: 'Moving', aria: s.client + ' moving to ' + T[c.to].short, onPick: pick(s.id)
+        }));
+        cards[c.to].push({
+          client: s.client, time: pad(c.h), top: (c.h - 9) * 64 + 3, strike: 'none', op: 1,
+          meta: c.room + ' · from ' + T[s.t].short, bg: '#e6eef8', bc: '#2b5a8f', bstyle: 'dashed', fg: '#2b5a8f',
+          pill: c.kind === 'preview' ? 'Preview' : 'Draft', ring: c.kind === 'preview' ? ring : 'none',
+          aria: s.client + ' draft with ' + T[c.to].short, onPick: pick(s.id)
+        });
+      }
+    });
+
+    const cols = colIds.map((id) => ({
+      name: T[id].name,
+      sub: id === 'morgan' ? 'On leave all day' : (cards[id].length + ' sessions'),
+      subColor: id === 'morgan' ? '#5a3f8f' : '#5b6b69',
+      bg: id === 'morgan' ? 'repeating-linear-gradient(135deg, #eee9f7 0 8px, #f6f3fb 8px 16px)' : '#ffffff',
+      cards: cards[id]
+    }));
+
+    const hours = [];
+    for (let h = 9; h < 18; h++) hours.push({ label: pad(h) });
+
+    const openList = open.map((id) => {
+      const s = sessionById[id];
+      return { client: s.client, time: pad(s.h), room: s.room, onPick: pick(id) };
+    });
+
+    let d = null;
+    if (st.sel && sessionById[st.sel]) {
+      const s = sessionById[st.sel];
+      const busyAt = (tid) => {
+        const hit = st.sessions.find((x) => {
+          const c = byS[x.id];
+          const t = c && !c.cancel ? c.to : x.t;
+          const h = c && !c.cancel ? c.h : x.h;
+          return x.id !== s.id && t === tid && h === s.h && !(c && c.cancel);
+        });
+        return hit ? hit.client.split(' ')[0] : null;
+      };
+      const tAt = colIds.map((tid) => {
+        if (tid === 'morgan') return { name: 'Morgan', state: 'on leave', color: '#5a3f8f' };
+        const b = busyAt(tid);
+        return { name: T[tid].short.split(' ')[0], state: b ? 'with ' + b : 'free', color: b ? '#8a5a00' : '#2e7d4f' };
+      });
+      const usedRooms = {};
+      st.sessions.forEach((x) => {
+        const c = byS[x.id];
+        if (c && c.cancel) return;
+        const h = c ? c.h : x.h; const r = c ? c.room : x.room;
+        if (h === s.h && x.id !== s.id) usedRooms[r] = true;
+      });
+      const free = ['Room 1', 'Room 2', 'Room 3', 'Room 4', 'Room 5'].filter((r) => !usedRooms[r]).map((r) => r.replace('Room ', ''));
+      d = {
+        client: s.client,
+        when: 'Tue, Oct 27 · ' + pad(s.h) + ' – ' + pad(s.h + 1) + ' · ' + s.room,
+        clientInfo: this.info()[s.id],
+        atLabel: 'Therapists at ' + pad(s.h),
+        tAt: tAt,
+        roomsFree: free.length ? 'Rooms ' + free.join(', ') : 'None',
+        options: OPTS[s.id].map((o) => ({
+          title: o.title, tag: o.tag, fit: o.fit, avail: o.avail, room: o.room,
+          fitColor: o.good ? '#2e7d4f' : '#5b6b69',
+          availColor: o.availOk ? '#2e7d4f' : '#8a5a00',
+          pressed: st.opt === o.id ? 'true' : 'false',
+          border: st.opt === o.id ? '1px solid #2f7f7a' : '1px solid #d9e1df',
+          ring: st.opt === o.id ? ring : 'none',
+          steps: o.changes.map((c, i) => ({ n: i + 1, text: c.text })),
+          onPick: () => this.setState({ opt: o.id })
+        }))
+      };
+    }
+
+    const idx = st.sel ? open.indexOf(st.sel) : -1;
+    const selOpt = st.sel && st.opt ? OPTS[st.sel].find((x) => x.id === st.opt) : null;
+    const nChanges = selOpt ? selOpt.changes.length : 0;
+
+    return {
+      cols: cols, hours: hours, openList: openList, d: d || { options: [], tAt: [] },
+      hasOpen: open.length > 0, noOpen: open.length === 0,
+      openLabel: open.length + (open.length === 1 ? ' conflict today' : ' conflicts today'),
+      showList: !d, showDetail: !!d,
+      progress: idx >= 0 ? 'Conflict ' + (idx + 1) + ' of ' + open.length : '',
+      noOpt: !selOpt,
+      stageLabel: selOpt ? 'Add ' + nChanges + (nChanges === 1 ? ' change' : ' changes') + ' to draft' : 'Select an option',
+      stageBg: selOpt ? '#2f7f7a' : '#eef2f1', stageFg: selOpt ? '#ffffff' : '#5b6b69',
+      hasStaged: st.staged.length > 0,
+      stagedCount: st.staged.length + (st.staged.length === 1 ? ' change' : ' changes'),
+      stagedList: st.staged.map((c) => ({ text: c.text })),
+      commitLabel: 'Commit ' + st.staged.length + (st.staged.length === 1 ? ' change' : ' changes'),
+      showDone: st.done > 0 && st.staged.length === 0,
+      doneLabel: st.done + (st.done === 1 ? ' change committed.' : ' changes committed.'),
+      back: () => this.setState({ sel: null, opt: null }),
+      stage: () => {
+        if (!selOpt) return;
+        const add = selOpt.changes.map((c) => Object.assign({ conflictId: st.sel }, c));
+        const staged = st.staged.concat(add);
+        const rest = this.openIds(staged);
+        this.setState({ staged: staged, sel: rest.length ? rest[0] : null, opt: null, done: 0 });
+      },
+      discard: () => this.setState({ staged: [], sel: null, opt: null }),
+      commit: () => {
+        const map = {};
+        st.staged.forEach((c) => { map[c.sid] = c; });
+        const sessions = st.sessions
+          .filter((s) => !(map[s.id] && map[s.id].cancel))
+          .map((s) => (map[s.id] ? Object.assign({}, s, { t: map[s.id].to, h: map[s.id].h, room: map[s.id].room }) : s));
+        this.setState({ sessions: sessions, done: st.staged.length, staged: [], sel: null, opt: null });
+      }
+    };
+  }
+}
+</script>
+</body>
+</html>

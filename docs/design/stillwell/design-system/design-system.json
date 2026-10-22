@@ -1,0 +1,25 @@
+{
+ "v": 3,
+ "layout": "files",
+ "createdOnFiles": {
+  "v": 1,
+  "at": "2026-10-22T02:55:20Z"
+ },
+ "title": "Stillwell",
+ "namespace": "ClinicAdmin",
+ "libraries": [],
+ "sections": {},
+ "groups": [],
+ "assetGroups": {},
+ "blobs": {},
+ "docs": {
+  "readme": "project/README.md",
+  "sections": []
+ },
+ "lastChange": {
+  "by": "Lester",
+  "at": "2026-10-22T02:59:36Z",
+  "via": "Cowork",
+  "note": "Matched statuses and guidance to the live Stillwell app"
+ }
+}

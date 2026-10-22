@@ -1,0 +1,60 @@
+<!-- @dsCard height=288 -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<style>
+html,body{margin:0;background:var(--surface-page)}
+.cover{position:relative;width:960px;height:288px;overflow:hidden;background:var(--surface-page);font-family:var(--font-sans)}
+.cover svg{position:absolute;inset:0}
+.primary{fill:var(--primary)} .ink{fill:var(--ink)} .subtle{fill:var(--primary-subtle)} .sunken{fill:var(--surface-sunken)}
+.tile{rx:var(--radius-sm)}
+.status-staged-bg{fill:var(--status-staged-bg)}
+.surface-card{fill:var(--surface-card);stroke:var(--border-subtle)}
+.status-conflict-bg{fill:var(--status-conflict-bg)}
+.primary-subtle{fill:var(--primary-subtle)}
+.txt{position:absolute;left:40px;bottom:32px;max-width:440px}
+.name{margin:0;font-size:80px;line-height:.95;font-weight:700;letter-spacing:-0.02em;color:var(--ink)}
+.tag{margin:16px 0 0;font-size:14px;line-height:20px;color:var(--ink-muted)}
+</style>
+<div class="cover"><svg viewBox="0 0 960 288" width="960" height="288" aria-hidden="true">
+<!-- blocks: primary 192x288 slab, ink 64x128, primary-subtle 64x144 (sides = space-8 multiples)
+     arrangement: one tall slab bleeding top and bottom, a narrow ink/tint column at the right edge
+     pattern: geometric modular tiles (dense scheduling UI) — a week grid of slots, merged two-tall where booked, in surface-sunken and status tints
+     scales: tiles 32x24 at space-2 (8px) gaps, rx radius-sm; blocks square-cornered -->
+<rect class="primary" x="480" y="0" width="192" height="288"/>
+<rect class="ink" x="896" y="0" width="64" height="128"/>
+<rect class="subtle" x="896" y="144" width="64" height="144"/>
+<rect class="tile sunken" x="688" y="24" width="32" height="24"/>
+<rect class="tile sunken" x="688" y="120" width="32" height="24"/>
+<rect class="tile sunken" x="688" y="152" width="32" height="24"/>
+<rect class="tile sunken" x="688" y="184" width="32" height="24"/>
+<rect class="tile sunken" x="688" y="216" width="32" height="24"/>
+<rect class="tile sunken" x="688" y="248" width="32" height="24"/>
+<rect class="tile sunken" x="728" y="88" width="32" height="24"/>
+<rect class="tile sunken" x="728" y="120" width="32" height="24"/>
+<rect class="tile sunken" x="728" y="152" width="32" height="24"/>
+<rect class="tile sunken" x="728" y="248" width="32" height="24"/>
+<rect class="tile sunken" x="768" y="24" width="32" height="24"/>
+<rect class="tile sunken" x="768" y="56" width="32" height="24"/>
+<rect class="tile sunken" x="768" y="88" width="32" height="24"/>
+<rect class="tile sunken" x="768" y="184" width="32" height="24"/>
+<rect class="tile sunken" x="768" y="216" width="32" height="24"/>
+<rect class="tile sunken" x="768" y="248" width="32" height="24"/>
+<rect class="tile sunken" x="808" y="24" width="32" height="24"/>
+<rect class="tile sunken" x="808" y="120" width="32" height="24"/>
+<rect class="tile sunken" x="808" y="152" width="32" height="24"/>
+<rect class="tile sunken" x="808" y="184" width="32" height="24"/>
+<rect class="tile sunken" x="848" y="24" width="32" height="24"/>
+<rect class="tile sunken" x="848" y="56" width="32" height="24"/>
+<rect class="tile sunken" x="848" y="88" width="32" height="24"/>
+<rect class="tile sunken" x="848" y="120" width="32" height="24"/>
+<rect class="tile sunken" x="848" y="216" width="32" height="24"/>
+<rect class="tile sunken" x="848" y="248" width="32" height="24"/>
+<rect class="tile status-staged-bg" x="688" y="56" width="32" height="56"/>
+<rect class="tile surface-card" x="728" y="24" width="32" height="56"/>
+<rect class="tile status-conflict-bg" x="768" y="120" width="32" height="56"/>
+<rect class="tile primary-subtle" x="808" y="56" width="32" height="56"/>
+<rect class="tile surface-card" x="848" y="152" width="32" height="56"/>
+<rect class="tile status-staged-bg" x="728" y="184" width="32" height="56"/>
+<rect class="tile surface-card" x="808" y="216" width="32" height="56"/>
+</svg>
+<div class="txt"><h1 class="name">Stillwell</h1><p class="tag">Calm, clear screens for a full day at the front desk.</p></div>
+</div>
