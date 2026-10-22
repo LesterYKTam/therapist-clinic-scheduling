@@ -7,6 +7,7 @@
     "test": "node --test",
     "dev": "npm --prefix web run dev",
     "build": "npm --prefix web run build",
+    "tokens": "node scripts/generate-tokens.mjs",
     "web:test": "npm --prefix web run test",
     "infra:up": "docker compose up -d",
     "infra:down": "docker compose down",

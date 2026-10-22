@@ -945,7 +945,7 @@ Description: Generate CSS variables from docs/design/stillwell/design-system/tok
 Source / reason: Stillwell design system v6
 Acceptance criteria: A token script produces a committed tokens.css. Text floor is 12px and body is 14px. Times use tabular numbers. A 2px focus ring is visible. QA confirms against the design guide.
 Priority: P1
-Status: READY
+Status: DONE (2026-10-22). 59 tokens generated from tokens.json with a freshness test; Inter via next/font; text floor 12px; focus ring. 91/91 tests pass. PM screenshot review done; QA visual and keyboard pass scheduled after phase 2.
 Sprint: S8
 Dependencies: DEBT-002
 Discovery class: ADJACENT
