@@ -993,7 +993,7 @@ Description: Remove the old stacked side panel, give the draft editor and leave 
 Source / reason: Stillwell design guide
 Acceptance criteria: Matches the guide's Setup, Reports and side-panel guidance. The screenshots are refreshed and the README images are updated.
 Priority: P2
-Status: READY
+Status: DONE (2026-10-22). Tabbed side panel (Conflicts, Draft, Leave, Notifications) with a Hide panel toggle; Setup in two columns with a rooms table and day chips; Reports top-aligned with a one-row form; side-panel role labels removed; polish applied. 130/130 tests pass. Final signed-in QA passed end to end.
 Sprint: S8
 Dependencies: UX-013
 Discovery class: ADJACENT
@@ -1005,7 +1005,7 @@ Description: The Add session, leave, preview and workable-options dialogs have n
 Source / reason: QA review of UX-010/UX-011, 2026-10-22
 Acceptance criteria: Every dialog has role="dialog", aria-modal and an accessible name. Focus moves to the first field when it opens, Tab is trapped inside, Escape closes it like Cancel, and focus returns to the button that opened it. Verified by keyboard in a real browser. No behaviour change otherwise.
 Priority: P2
-Status: READY
+Status: DONE (2026-10-22). Shared useDialog: role=dialog, aria-modal and a label; focus in, Tab trap, Escape closes, focus returns. QA verified 5 dialogs by keyboard.
 Sprint: S8
 Dependencies: UX-011
 Discovery class: ADJACENT

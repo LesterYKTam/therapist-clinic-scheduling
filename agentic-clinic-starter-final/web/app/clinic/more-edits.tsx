@@ -75,7 +75,7 @@ export function MoreEdits({
             >
               {sessions.map((item) => (
                 <option value={item.id} key={item.id}>
-                  {item.date} {item.time} · {nameOf(state.clients, item.client)} · Client
+                  {item.date} {item.time} · {nameOf(state.clients, item.client)}
                 </option>
               ))}
             </select>
@@ -86,7 +86,7 @@ export function MoreEdits({
               <select value={target || ""} onChange={(e) => setTherapist(e.target.value)}>
                 {ranked.map((item) => (
                   <option value={item.id} key={item.id}>
-                    {item.name} · Therapist
+                    {item.name}
                   </option>
                 ))}
               </select>

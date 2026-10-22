@@ -1,17 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { AutoResolveProposal } from "./auto-resolve-proposal";
 import { ConflictDetail, optionCardsFor } from "./conflict-detail";
 import { AUTO_RAN_NOTE, ConflictList } from "./conflict-panel";
-import { DraftPanel } from "./draft-panel";
-import { MoreEdits } from "./more-edits";
 import { openConflicts } from "./resolve-model";
-import type { ClinicState, PodHandler, Selection, Session, StageHandler } from "./types";
+import type { ClinicState, PodHandler, Session, StageHandler } from "./types";
 
-// The side panel: one job at a time. Conflicts by default; picking a conflict
-// opens its guided detail with the engine's options. The shared draft and the
-// older manual forms sit below. Nothing here commits without the Commit button.
+// The Conflicts tab: one job at a time. Picking a conflict opens its guided
+// detail with the engine's options. The shared draft and the older manual
+// forms live in the Draft tab. Nothing here commits without the Commit button.
 export function ResolvePanel({
   state,
   pod,
@@ -22,13 +20,11 @@ export function ResolvePanel({
   onSelect,
   onOption,
   onStage,
-  onRemove,
   onPreviewAuto,
   onApplyAuto,
   onDiscardAuto,
-  onCommit,
-  onDiscard,
-  selection,
+  onAnnounce,
+  onResolved,
 }: {
   state: ClinicState;
   pod: string;
@@ -40,15 +36,14 @@ export function ResolvePanel({
   onSelect: (sessionId: string | null) => void;
   onOption: (key: string | null) => void;
   onStage: StageHandler;
-  onRemove: (pod: string, sessionId: string) => Promise<boolean>;
   onPreviewAuto: PodHandler;
   onApplyAuto: PodHandler;
   onDiscardAuto: PodHandler;
-  onCommit: PodHandler;
-  onDiscard: PodHandler;
-  selection: Selection | null;
+  // Screen-reader message; the live region sits outside the tab panels.
+  onAnnounce: (message: string) => void;
+  // The last open conflict was staged.
+  onResolved: () => void;
 }) {
-  const [announcement, setAnnouncement] = useState("");
   const [listFocus, setListFocus] = useState(0);
   const draft = state.drafts?.find((item) => item.pod === pod);
   const proposal = draft?.proposal;
@@ -62,15 +57,13 @@ export function ResolvePanel({
   );
   const index = open.findIndex((item) => item.sessionId === selectedId);
   const current = index >= 0 && !proposal && !readOnly ? open[index] : null;
-  // A stale announcement should not follow the admin to another pod or out of the detail.
-  useEffect(() => setAnnouncement(""), [pod]);
   const back = () => {
-    setAnnouncement("");
+    onAnnounce("");
     onSelect(null);
     setListFocus((value) => value + 1);
   };
   return (
-    <aside className="resolve" aria-label="Conflicts and changes">
+    <div className="resolve">
       {proposal ? (
         <AutoResolveProposal
           state={state}
@@ -97,11 +90,14 @@ export function ResolvePanel({
           onStage={onStage}
           onStaged={() => {
             const rest = open.filter((item) => item.sessionId !== current.sessionId);
-            setAnnouncement(
-              `Added to draft. ${rest.length === 0 ? "No open conflicts left." : `${rest.length} open ${rest.length === 1 ? "conflict" : "conflicts"} left.`}`,
+            onAnnounce(
+              `Added to draft. ${rest.length === 0 ? "No open conflicts left. Opening the Draft tab." : `${rest.length} open ${rest.length === 1 ? "conflict" : "conflicts"} left.`}`,
             );
             onSelect(rest[0]?.sessionId || null);
-            if (!rest.length) setListFocus((value) => value + 1);
+            if (!rest.length) {
+              setListFocus((value) => value + 1);
+              onResolved();
+            }
           }}
         />
       ) : (
@@ -123,24 +119,6 @@ export function ResolvePanel({
           {!readOnly && draft?.autoResolveRun && <p className="resolve-sub">{AUTO_RAN_NOTE}</p>}
         </>
       )}
-      {draft && (
-        <DraftPanel
-          state={state}
-          pod={pod}
-          draft={draft}
-          sessions={sessions}
-          hasProposal={!!proposal}
-          openIds={new Set(open.map((item) => item.sessionId))}
-          readOnly={readOnly}
-          onRemove={onRemove}
-          onCommit={onCommit}
-          onDiscard={onDiscard}
-        />
-      )}
-      {!readOnly && <MoreEdits state={state} pod={pod} onStage={onStage} selection={selection} />}
-      <div className="sr-only" role="status" aria-live="polite">
-        {announcement}
-      </div>
-    </aside>
+    </div>
   );
 }

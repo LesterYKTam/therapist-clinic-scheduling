@@ -124,8 +124,10 @@ export function ConflictList({
                 <strong>
                   {item.session.date} · {item.session.time}
                 </strong>
-                <span>{nameOf(state.clients, item.session.client)} · Client</span>
-                <span>{nameOf(state.therapists, item.session.therapist)} · Therapist</span>
+                <span>
+                  {nameOf(state.clients, item.session.client)} with{" "}
+                  {shortName(nameOf(state.therapists, item.session.therapist) || "")}
+                </span>
                 <span>Recorded leave: {leaveText(item.leaves)}</span>
               </li>
             ))}

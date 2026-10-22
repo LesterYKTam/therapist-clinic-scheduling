@@ -68,10 +68,9 @@ function CalendarSettings({
           ))}
         </select>
       </label>
-      <div className="day-checks">
+      <div className="day-chips" role="group" aria-label="Days open">
         {ALL_DAYS.map((day) => (
-          <label className="check" key={day}>
-            {WEEKDAYS_SHORT[day - 1]}
+          <label className="day-chip" key={day}>
             <input
               type="checkbox"
               checked={next.config.workingDays.includes(day)}
@@ -84,6 +83,7 @@ function CalendarSettings({
                 )
               }
             />
+            <span>{WEEKDAYS_SHORT[day - 1]}</span>
           </label>
         ))}
       </div>
@@ -106,23 +106,35 @@ function RoomsSection({
       <p>
         Turn off Active to remove a room from future bookings. Existing future reservations must be moved first; past reservations remain readable.
       </p>
-      {next.rooms.map((room) => (
-        <div className="row" key={room.id}>
-          <input
-            value={room.name}
-            aria-label="Room name"
-            onChange={(e) => update("rooms", room.id, "name", e.target.value)}
-          />
-          <label className="check">
-            Active
-            <input
-              type="checkbox"
-              checked={room.active}
-              onChange={(e) => update("rooms", room.id, "active", e.target.checked)}
-            />
-          </label>
-        </div>
-      ))}
+      <table className="rooms-table">
+        <thead>
+          <tr>
+            <th scope="col">Room</th>
+            <th scope="col">Active</th>
+          </tr>
+        </thead>
+        <tbody>
+          {next.rooms.map((room) => (
+            <tr key={room.id}>
+              <td>
+                <input
+                  value={room.name}
+                  aria-label="Room name"
+                  onChange={(e) => update("rooms", room.id, "name", e.target.value)}
+                />
+              </td>
+              <td>
+                <input
+                  type="checkbox"
+                  checked={room.active}
+                  aria-label={`${room.name} active`}
+                  onChange={(e) => update("rooms", room.id, "active", e.target.checked)}
+                />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
       <button onClick={onAdd}>Add room</button>
     </section>
   );
@@ -305,18 +317,21 @@ export function SetupScreen({
   return (
     <fieldset disabled={readOnly} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
       <header>
-        <p className="eyebrow">Infrequent clinic configuration</p>
         <h1>Setup</h1>
         <p>Changes are checked against every committed booking before saving.</p>
         {readOnly && (
           <p>Setup is read-only while you view another pod. Switch back to your own pod to edit.</p>
         )}
       </header>
-      <div className="grid">
-        <CalendarSettings next={next} config={config} />
-        <RoomsSection next={next} update={update} onAdd={addRoom} />
-        <StaffSection next={next} pod={pod} setPod={setPod} update={update} onAdd={addTherapist} />
-        <ClientsSection next={next} update={update} onAdd={addClient} />
+      <div className="setup-grid">
+        <div className="setup-col">
+          <CalendarSettings next={next} config={config} />
+          <RoomsSection next={next} update={update} onAdd={addRoom} />
+        </div>
+        <div className="setup-col">
+          <StaffSection next={next} pod={pod} setPod={setPod} update={update} onAdd={addTherapist} />
+          <ClientsSection next={next} update={update} onAdd={addClient} />
+        </div>
       </div>
       <button className="primary" onClick={() => onSaved(next)}>
         Check impact and save setup

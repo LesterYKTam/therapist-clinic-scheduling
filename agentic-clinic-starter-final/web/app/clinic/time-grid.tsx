@@ -1,10 +1,10 @@
 "use client";
 
-import type { CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 // @ts-expect-error The JavaScript scheduling policy is verified in the Node suite.
 import { localInstant } from "../../lib/scheduling.mjs";
 import { buildCards, type CardModel, type CardPreview } from "./card-state";
-import { hiddenSummary, layoutColumn } from "./grid-collapse";
+import { hiddenSummary, laneBudget, layoutColumn } from "./grid-collapse";
 import { assignLanes, formatMinutes, hourRange, leaveBlocks, toMinutes } from "./grid-layout";
 import { nameOf as lookup } from "./names";
 import { formatDay } from "./resolve-model";
@@ -15,6 +15,7 @@ export { formatDay };
 export type CalendarView = "day" | "week";
 
 const HOUR_PX = 64;
+const HOURS_COL_PX = 56;
 
 // "Morgan Testerson" -> "Morgan T."
 const shortName = (name: string) => {
@@ -65,6 +66,17 @@ export function TimeGrid({
   onOpenDay: (date: string) => void;
 }) {
   const tz = state.config.timezone;
+  // The grid's own width decides how many lanes fit before sessions fold into "+N more".
+  const gridRef = useRef<HTMLElement>(null);
+  const [gridPx, setGridPx] = useState<number | null>(null);
+  useEffect(() => {
+    const element = gridRef.current;
+    if (!element || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => setGridPx(element.clientWidth));
+    observer.observe(element);
+    setGridPx(element.clientWidth);
+    return () => observer.disconnect();
+  }, []);
   const draft = state.drafts?.find((item) => item.pod === pod);
   const inPod = (item: any) =>
     state.clients.find((client) => client.id === item.session?.client)?.pod === pod;
@@ -163,11 +175,15 @@ export function TimeGrid({
     });
   }
 
+  const budget = laneBudget(
+    gridPx === null ? null : (gridPx - HOURS_COL_PX) / Math.max(columns.length, 1),
+  );
   const hours = Array.from({ length: lastHour - firstHour }, (_, i) => firstHour + i);
-  const template = `56px repeat(${Math.max(columns.length, 1)}, minmax(0, 1fr))`;
+  const template = `${HOURS_COL_PX}px repeat(${Math.max(columns.length, 1)}, minmax(0, 1fr))`;
 
   return (
     <section
+      ref={gridRef}
       className="time-grid"
       aria-label={view === "day" ? "Day schedule by therapist" : "Week schedule"}
     >
@@ -202,7 +218,7 @@ export function TimeGrid({
             // Day columns are per therapist, so only Week view folds crowded clusters.
             const { placed, overflows } =
               view === "week"
-                ? layoutColumn(laneItems)
+                ? layoutColumn(laneItems, budget.maxLanes, budget.shown)
                 : { placed: assignLanes(laneItems), overflows: [] as ReturnType<typeof layoutColumn>["overflows"] };
             return (
               <div

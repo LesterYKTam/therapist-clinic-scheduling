@@ -25,7 +25,7 @@ export function CalendarHeader({
       <div className="calendar-actions">
         {conflictStatus}
         {!readOnly && (
-          <button className="primary" onClick={onAdd}>
+          <button className="primary" data-dialog-return onClick={onAdd}>
             Add session
           </button>
         )}
@@ -43,6 +43,8 @@ export function CalendarTools({
   onPrevious,
   onToday,
   onNext,
+  panelHidden,
+  onTogglePanel,
 }: {
   view: CalendarView;
   title: string;
@@ -50,6 +52,8 @@ export function CalendarTools({
   onPrevious: () => void;
   onToday: () => void;
   onNext: () => void;
+  panelHidden: boolean;
+  onTogglePanel: () => void;
 }) {
   const unit = view === "day" ? "day" : "week";
   return (
@@ -68,6 +72,15 @@ export function CalendarTools({
         <button onClick={onNext}>Next {unit}</button>
       </div>
       <strong className="date-title" aria-live="polite">{title}</strong>
+      <button
+        type="button"
+        className="panel-toggle"
+        aria-expanded={!panelHidden}
+        aria-controls="side-column"
+        onClick={onTogglePanel}
+      >
+        {panelHidden ? "Show panel" : "Hide panel"}
+      </button>
     </section>
   );
 }

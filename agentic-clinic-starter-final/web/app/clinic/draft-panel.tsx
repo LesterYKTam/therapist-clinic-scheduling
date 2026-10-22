@@ -91,7 +91,7 @@ export function DraftPanel({
                 <strong>
                   {issue.session?.date} {issue.session?.time}
                 </strong>{" "}
-                · {nameOf(state.clients, issue.session?.client)} · Client
+                · {nameOf(state.clients, issue.session?.client)}
                 <ul>
                   {issue.reasons.map((reason: string) => (
                     <li key={reason}>{reason}</li>

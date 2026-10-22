@@ -1,6 +1,7 @@
 "use client";
 
 import { nameOf } from "./names";
+import { shortName } from "./resolve-model";
 import type { ClinicState } from "./types";
 
 type TaskItem = {
@@ -43,10 +44,10 @@ export function NotificationPanel({
   );
   const details = (session: any) =>
     session
-      ? `${session.date} at ${session.time} · ${session.minutes} minutes · ${nameOf(state.clients, session.client)} · Client · ${nameOf(state.therapists, session.therapist)} · Therapist · ${session.location === "home" ? "Home" : session.roomName || nameOf(state.rooms, session.room)}`
+      ? `${session.date} at ${session.time} · ${session.minutes} minutes · ${nameOf(state.clients, session.client)} with ${shortName(nameOf(state.therapists, session.therapist) || "")} · ${session.location === "home" ? "Home" : session.roomName || nameOf(state.rooms, session.room)}`
       : "None";
   return (
-    <section className="conflict-panel" aria-label="Notification worklist">
+    <section className="conflict-panel notify-list" aria-label="Notification worklist">
       <h2>Notification worklist · {tasks.length}</h2>
       <p>These tasks are created only after a schedule commit. No messages are sent automatically.</p>
       {tasks.length ? (
@@ -57,7 +58,7 @@ export function NotificationPanel({
                 {task.recipientRole === "client"
                   ? nameOf(state.clients, task.recipientId)
                   : nameOf(state.therapists, task.recipientId)}{" "}
-                · {task.recipientRole === "client" ? "Client" : "Therapist"} · {taskItems(task).length} session {taskItems(task).length === 1 ? "change" : "changes"}
+                · {taskItems(task).length} session {taskItems(task).length === 1 ? "change" : "changes"}
               </strong>
               {taskItems(task).map((item) => (
                 <div key={item.sessionId}>

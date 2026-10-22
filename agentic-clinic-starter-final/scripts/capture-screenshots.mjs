@@ -1,7 +1,7 @@
 // Capture README screenshots from a running, signed-in instance using headless Chrome over the DevTools protocol.
 // Usage: SHOT_EMAIL=... SHOT_PASSWORD=... node scripts/capture-screenshots.mjs [--base http://localhost:3001] [--out ../docs/images]
 // Synthetic DEV data only. Credentials come from the environment and are never written anywhere.
-// The run leaves a draft behind (Auto resolve); reset DEV afterwards with `node scripts/seed-demo.mjs --env dev`.
+// The run discards the Auto resolve proposal and any draft it created, so DEV is left clean; reseeding with `node scripts/seed-demo.mjs --env dev` is optional.
 import { spawn } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -74,7 +74,10 @@ try {
   await shot('02-auto-resolve-proposal.png');
   await clickText('Discard suggestions');
   await sleep(800);
-  await clickText('Discard');
+  // Only discard the draft if one still exists (it is on the Draft tab).
+  await evaluate("document.getElementById('side-tab-draft').click()");
+  await sleep(300);
+  await evaluate("(() => { const b = [...document.querySelectorAll('button')].find((x) => x.textContent.trim() === 'Discard' && x.offsetParent && !x.disabled); if (b) b.click(); return !!b; })()");
   await sleep(800);
 
   // 3. Read-only view of the other pod.

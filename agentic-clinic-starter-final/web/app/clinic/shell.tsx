@@ -1,6 +1,8 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { authClient } from "../../lib/auth-client";
+import { summarizeFailure } from "./notice-text";
 import type { ClinicState, Screen } from "./types";
 
 const SCREENS: Screen[] = ["calendar", "setup", "reports"];
@@ -99,13 +101,25 @@ export function Notices({
   podName,
   notice,
   failure,
+  reveal = false,
 }: {
   readOnly: boolean;
   state: ClinicState;
   podName: (id?: string) => string | undefined;
   notice: string;
   failure: string;
+  // Scroll a new result into view and move focus to it (Setup saves from the page bottom).
+  reveal?: boolean;
 }) {
+  const noticeRef = useRef<HTMLParagraphElement>(null);
+  const failureRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!reveal) return;
+    const target = failure ? failureRef.current : notice ? noticeRef.current : null;
+    target?.scrollIntoView({ block: "center" });
+    target?.focus({ preventScroll: true });
+  }, [reveal, notice, failure]);
+  const summary = summarizeFailure(failure);
   return (
     <>
       {readOnly && (
@@ -113,11 +127,34 @@ export function Notices({
           Viewing {podName(state.viewPod)} — read-only. You can edit only {podName(state.assignedPod)}.
         </p>
       )}
-      {notice && <p className="notice">{notice}</p>}
-      {failure && (
-        <p className="notice error" role="alert">
-          {failure}
+      {notice && (
+        <p className="notice" id="clinic-notice" role="status" aria-live="polite" tabIndex={-1} ref={noticeRef}>
+          {notice}
         </p>
+      )}
+      {failure && (
+        <div className="notice error" role="alert" tabIndex={-1} ref={failureRef}>
+          {summary.more ? (
+            <>
+              <p className="notice-lead">{summary.lead}</p>
+              <ul className="notice-list">
+                {summary.items.map((item, index) => (
+                  <li key={index}>{item}</li>
+                ))}
+              </ul>
+              <details>
+                <summary>and {summary.more} more</summary>
+                <ul className="notice-list">
+                  {summary.full.map((item, index) => (
+                    <li key={index}>{item}</li>
+                  ))}
+                </ul>
+              </details>
+            </>
+          ) : (
+            failure
+          )}
+        </div>
       )}
     </>
   );

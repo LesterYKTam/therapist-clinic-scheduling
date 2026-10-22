@@ -31,7 +31,7 @@ a{color:var(--primary)}
 .nav.active,.nav.active:hover{background:var(--primary-subtle);color:var(--primary-hover);font-weight:var(--type-body-strong-weight)}
 .sidebar-signout{margin:auto 0 0;width:100%;text-align:left;border:0;background:transparent;color:var(--ink-muted);padding:var(--space-2) var(--space-3);text-decoration:none}
 .sidebar-signout:hover{background:var(--surface-card);color:var(--ink)}
-.content{max-width:1260px;width:100%;margin:auto;padding:var(--space-8) 42px}
+.content{max-width:1260px;width:100%;margin:0 auto;padding:var(--space-8) 42px}
 header{margin-bottom:var(--space-6)}
 .eyebrow{font-size:var(--type-label-size);line-height:var(--type-label-line);font-weight:var(--type-label-weight);color:var(--ink-muted);letter-spacing:.08em;text-transform:uppercase;margin:0}
 h1{font-size:var(--type-page-title-size);line-height:var(--type-page-title-line);font-weight:var(--type-page-title-weight);margin:var(--space-1) 0 var(--space-2)}
@@ -58,6 +58,9 @@ th,td{padding:10px 6px;border-bottom:1px solid var(--border-subtle);vertical-ali
 .person{display:block}
 .person span{display:block;color:var(--ink-muted);font-size:var(--type-caption-size);line-height:var(--type-caption-line);margin-top:var(--space-1)}
 .report{max-width:760px}
+.report-form{display:flex;flex-wrap:wrap;align-items:flex-end;gap:var(--space-3)}
+.report-form label{margin:0;flex:1 1 220px}
+.report-form button{margin:0}
 @media(max-width:780px){.workspace{grid-template-columns:1fr;grid-template-rows:auto 1fr;align-content:start}.content{margin:0 auto}.sidebar{position:static;height:auto;border-right:0;border-bottom:1px solid var(--border-subtle);flex-direction:row;flex-wrap:wrap;align-items:center}.nav{width:auto}.sidebar-pod{padding:0}.sidebar-signout{margin:0 0 0 auto;width:auto}.content{padding:22px}.grid{grid-template-columns:1fr}}
 
 .calendar-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:var(--space-3)}
@@ -90,7 +93,7 @@ th,td{padding:10px 6px;border-bottom:1px solid var(--border-subtle);vertical-ali
   @page { margin: 15mm; }
   body { background: white; color: black; }
   .workspace { display: block; min-height: auto; }
-  .sidebar, .content > header, .conflict-status, .notice, .report > label, .report > button, .report-download { display: none !important; }
+  .sidebar, .content > header, .conflict-status, .notice, .report-form, .report > button, .report-download { display: none !important; }
   .content { max-width: none; margin: 0; padding: 0; }
   .report { border: 0; border-radius: 0; box-shadow: none; padding: 0; }
   .report table { width: 100%; font-size: 10pt; }
@@ -238,3 +241,48 @@ button.session-card:hover{border-color:var(--border-control)}
 .session-card.is-selected{box-shadow:0 0 0 2px var(--primary);z-index:2}
 .session-card.is-preview{box-shadow:0 0 0 2px var(--primary);z-index:3}
 @media(max-width:900px){.fact-tiles{grid-template-columns:1fr}}
+
+/* UX-014: tabbed side panel, panel toggle, Setup and Reports restyle. */
+.calendar-body.panel-hidden{grid-template-columns:minmax(0,1fr)}
+.side-column{min-width:0}
+.side-column[hidden]{display:none}
+.panel-toggle{margin:0 0 0 auto}
+.side-panel{display:flex;flex-direction:column;gap:var(--space-3);min-width:0}
+.side-tabs{display:flex;gap:var(--space-1);padding:3px;background:var(--surface-sunken);border-radius:var(--radius-md)}
+.side-tab{flex:1 1 auto;min-width:0;display:inline-flex;align-items:center;justify-content:center;gap:4px;margin:0;border:0;border-radius:var(--radius-sm);padding:var(--space-1) 6px;white-space:nowrap;background:transparent;color:var(--ink-muted);font-weight:var(--type-body-weight)}
+.side-tab:hover{background:transparent;color:var(--ink)}
+.side-tab.is-active,.side-tab.is-active:hover{background:var(--surface-card);color:var(--ink);font-weight:var(--type-body-strong-weight)}
+.tab-badge{display:inline-block;min-width:18px;padding:0 5px;border-radius:9px;background:var(--primary-subtle);color:var(--primary-hover);font-size:var(--type-label-size);line-height:var(--type-label-line);font-weight:var(--type-body-strong-weight);text-align:center;font-variant-numeric:tabular-nums}
+.badge-draft{background:var(--status-staged-bg);color:var(--status-staged-fg)}
+.side-panel [role="tabpanel"][hidden]{display:none}
+.side-panel [role="tabpanel"].resolve{display:flex}
+.side-panel [role="tabpanel"].resolve[hidden]{display:none}
+.side-panel [role="tabpanel"]:focus-visible{outline-offset:-2px}
+.setup-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:var(--space-6);margin-bottom:var(--space-6);align-items:start}
+@media(min-width:1200px){.setup-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.setup-col{display:flex;flex-direction:column;gap:var(--space-6);min-width:0}
+.rooms-table{margin-bottom:var(--space-3)}
+.rooms-table th,.rooms-table td{padding:2px var(--space-2);vertical-align:middle}
+.rooms-table td input:not([type="checkbox"]){padding:3px var(--space-2)}
+.rooms-table th:last-child,.rooms-table td:last-child{width:72px;text-align:center}
+.rooms-table td input[type="text"],.rooms-table td input:not([type]){margin:0;border-color:transparent;background:transparent}
+.rooms-table td input:not([type="checkbox"]):hover,.rooms-table td input:not([type="checkbox"]):focus{border-color:var(--border-control);background:var(--surface-card)}
+.rooms-table td input[type="checkbox"]{width:auto;margin:0}
+.day-chips{display:flex;flex-wrap:wrap;gap:var(--space-2);margin-top:var(--space-3)}
+.day-chip{position:relative;display:inline-block;margin:0}
+.day-chip input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer}
+.day-chip span{display:inline-block;min-width:48px;text-align:center;padding:var(--space-1) var(--space-3);border:1px solid var(--border-control);border-radius:999px;background:var(--surface-card);color:var(--ink-muted);font-weight:var(--type-body-weight)}
+.day-chip input:checked+span{background:var(--primary-subtle);border-color:var(--primary);color:var(--primary-hover);font-weight:var(--type-body-strong-weight)}
+.day-chip input:focus-visible+span{outline:2px solid var(--focus-ring);outline-offset:2px}
+.dialog h2:focus{outline:none}
+.report-form select,.report-form input,.report-form button{height:38px;margin-top:var(--space-1)}
+.report-form button{margin-top:var(--space-1);padding-top:0;padding-bottom:0}
+.report-form + h2{margin-top:var(--space-6)}
+.workspace .notify-list li{background:var(--surface-card);border:1px solid var(--border-subtle);border-left-width:1px;border-radius:var(--radius-sm)}
+.notify-list li strong{color:var(--ink)}
+.workspace .notify-list li span,.workspace .notify-list li small{color:var(--ink-muted)}
+.notice:focus{outline:none}
+.notice:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+.notice .notice-lead{margin:0 0 var(--space-1)}
+.notice .notice-list{margin:0;padding-left:var(--space-6)}
+.notice details{margin-top:var(--space-1)}

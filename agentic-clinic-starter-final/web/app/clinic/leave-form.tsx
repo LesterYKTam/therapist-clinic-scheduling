@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { today } from "./dates";
 import type { ClinicState, LeaveInterval } from "./types";
+import { useDialog } from "./use-dialog";
 
 type LeaveDraft = LeaveInterval;
 
@@ -28,10 +29,11 @@ export function LeaveForm({
   });
   const set = (key: keyof LeaveDraft, value: string) =>
     setLeave((old) => ({ ...old, [key]: value }));
+  const { dialogProps, titleProps } = useDialog(onClose);
   return (
     <div className="modal">
-      <div className="dialog">
-        <h2>Record therapist leave</h2>
+      <div className="dialog" {...dialogProps}>
+        <h2 {...titleProps}>Record therapist leave</h2>
         <p>
           This saves the leave now. Any affected sessions stay on the committed calendar as schedule conflicts until resolved.
         </p>

@@ -6,13 +6,12 @@ import { draftCandidate } from "../../lib/scheduling.mjs";
 import { CalendarHeader, CalendarTools } from "./calendar-toolbar";
 import { defaultEndDate, nextBookingDate, startOfWeek, today } from "./dates";
 import { LeaveForm } from "./leave-form";
-import { LeavePanel } from "./leave-panel";
-import { NotificationPanel } from "./notification-panel";
 import { PreviewDialog } from "./preview-dialog";
-import { ResolvePanel } from "./resolve-panel";
 import { openConflicts, previewChange } from "./resolve-model";
 import { optionCardsFor } from "./conflict-detail";
 import { SessionDialog } from "./session-dialog";
+import { SidePanel } from "./side-panel";
+import { PANEL_HIDDEN_KEY, parseSideTab, tabForCard, TAB_KEY, type SideTab } from "./side-tabs";
 import type { ClinicActions } from "./use-clinic-actions";
 import type { Clinic } from "./use-clinic";
 import type { Selection } from "./types";
@@ -118,6 +117,59 @@ export function CalendarScreen({
     value.setUTCDate(value.getUTCDate() + days);
     return value.toISOString().slice(0, 10);
   };
+  // Side panel: the active tab (kept for the browser tab) and whether it is hidden.
+  const [tab, setTab] = useState<SideTab>("conflicts");
+  const [panelHidden, setPanelHidden] = useState(false);
+  useEffect(() => {
+    try {
+      const saved = parseSideTab(window.sessionStorage.getItem(TAB_KEY));
+      if (saved) setTab(saved);
+    } catch {
+      // Storage can be blocked; Conflicts is the default.
+    }
+    try {
+      if (window.localStorage.getItem(PANEL_HIDDEN_KEY) === "1") setPanelHidden(true);
+    } catch {
+      // The panel stays visible.
+    }
+  }, []);
+  const chooseTab = (next: SideTab) => {
+    setTab(next);
+    try {
+      window.sessionStorage.setItem(TAB_KEY, next);
+    } catch {
+      // Not remembering the tab is harmless.
+    }
+  };
+  const togglePanel = () => {
+    const next = !panelHidden;
+    setPanelHidden(next);
+    try {
+      window.localStorage.setItem(PANEL_HIDDEN_KEY, next ? "1" : "0");
+    } catch {
+      // Not remembering the choice is harmless.
+    }
+  };
+  // After a commit, focus the Notifications tab when tasks were created, else the success notice.
+  const [committed, setCommitted] = useState(0);
+  const pendingTasks = (state.notifications || []).filter(
+    (item) => item.pod === pod && item.status === "pending",
+  ).length;
+  useEffect(() => {
+    if (!committed) return;
+    if (pendingTasks > 0) {
+      chooseTab("notifications");
+      setPanelHidden(false);
+      window.setTimeout(() => document.getElementById("side-tab-notifications")?.focus(), 0);
+    } else {
+      window.setTimeout(() => document.getElementById("clinic-notice")?.focus(), 0);
+    }
+  }, [committed]);
+  const afterCommit = async (run: () => Promise<boolean>) => {
+    const ok = await run();
+    if (ok) setCommitted((value) => value + 1);
+    return ok;
+  };
   const [entryOpen, setEntryOpen] = useState(false);
   const [leaveOpen, setLeaveOpen] = useState(false);
   const [selection, setSelection] = useState<Selection | null>(null);
@@ -126,6 +178,11 @@ export function CalendarScreen({
   const [optionKey, setOptionKey] = useState<string | null>(null);
   const selectConflict = (sessionId: string | null) => {
     setResolveId(sessionId);
+    // Picking a conflict means the Conflicts tab (and the panel) should be showing.
+    if (sessionId) {
+      chooseTab("conflicts");
+      setPanelHidden(false);
+    }
     // Show the conflict on the grid: its day in Day view, its week in Week view.
     const date = (state.conflicts || []).find((item: any) => item.sessionId === sessionId)?.session.date;
     if (date) setAnchor(date);
@@ -202,8 +259,12 @@ export function CalendarScreen({
   const submit = async () => {
     if (await previewDraft()) setEntryOpen(false);
   };
-  const choose = (sessionId: string, openOptions: boolean) =>
+  const choose = (sessionId: string, openOptions: boolean) => {
     setSelection({ sessionId, openOptions, key: Date.now() });
+    // Any other card is edited by hand: Draft tab, with More edits.
+    chooseTab(tabForCard(false));
+    setPanelHidden(false);
+  };
   // A grid card: an open conflict opens the guided view, anything else the manual forms.
   const selectCard = (sessionId: string) => {
     if (open.some((item) => item.sessionId === sessionId)) selectConflict(sessionId);
@@ -225,8 +286,10 @@ export function CalendarScreen({
         onPrevious={() => setAnchor(view === "day" ? stepDay(-1) : shift(anchor, -7))}
         onToday={() => setAnchor(todayDate)}
         onNext={() => setAnchor(view === "day" ? stepDay(1) : shift(anchor, 7))}
+        panelHidden={panelHidden}
+        onTogglePanel={togglePanel}
       />
-      <div className="calendar-body">
+      <div className={`calendar-body${panelHidden ? " panel-hidden" : ""}`}>
         <TimeGrid
           view={view}
           state={state}
@@ -248,37 +311,29 @@ export function CalendarScreen({
             setEntryOpen(true);
           }}
         />
-        <div>
-          <ResolvePanel
+        <div className="side-column" hidden={panelHidden} id="side-column">
+          <SidePanel
             state={state}
             pod={pod}
             readOnly={readOnly}
             sessions={events}
-            selectedId={resolveId}
+            tab={tab}
+            onTab={chooseTab}
+            resolveId={resolveId}
             optionKey={optionKey}
-            onSelect={selectConflict}
+            onSelectConflict={selectConflict}
             onOption={setOptionKey}
             onStage={stageDraft}
             onRemove={removeDraftChange}
             onPreviewAuto={previewAutoResolve}
             onApplyAuto={applyAutoResolve}
             onDiscardAuto={discardAutoResolve}
-            onCommit={commitSharedDraft}
+            onCommit={(target: string) => afterCommit(() => commitSharedDraft(target))}
             onDiscard={discardSharedDraft}
+            onAmendLeave={amendLeave}
+            onWithdrawLeave={withdrawLeave}
+            onHandleNotification={handleNotification}
             selection={selection}
-          />
-          <NotificationPanel
-            state={state}
-            pod={pod}
-            readOnly={readOnly}
-            onHandle={handleNotification}
-          />
-          <LeavePanel
-            state={state}
-            pod={pod}
-            readOnly={readOnly}
-            onAmend={amendLeave}
-            onWithdraw={withdrawLeave}
           />
         </div>
       </div>
@@ -319,7 +374,7 @@ export function CalendarScreen({
             setPreview(null);
             setEntryOpen(true);
           }}
-          onCommit={commit}
+          onCommit={() => afterCommit(() => commit())}
         />
       )}
     </>

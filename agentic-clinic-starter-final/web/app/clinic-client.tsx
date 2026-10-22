@@ -46,6 +46,7 @@ export default function ClinicClient({
           podName={clinic.podName}
           notice={clinic.notice}
           failure={clinic.failure}
+          reveal={screen === "setup"}
         />
         {screen === "calendar" && (
           <CalendarScreen

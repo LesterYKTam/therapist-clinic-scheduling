@@ -2,6 +2,7 @@
 
 import { nameOf } from "./names";
 import type { ClinicState, PreviewResult } from "./types";
+import { useDialog } from "./use-dialog";
 
 // Shows what a one-off edit or cancellation would change before it is committed.
 export function PreviewDialog({
@@ -15,10 +16,11 @@ export function PreviewDialog({
   onBack: () => void;
   onCommit: () => void;
 }) {
+  const { dialogProps, titleProps } = useDialog(onBack);
   return (
     <div className="modal">
-      <div className="dialog">
-        <h2>Preview ready</h2>
+      <div className="dialog" {...dialogProps}>
+        <h2 {...titleProps}>Preview ready</h2>
         <p>
           {preview.occurrences.length} changed and {preview.removed.length} removed. The calendar is unchanged until you commit.
         </p>

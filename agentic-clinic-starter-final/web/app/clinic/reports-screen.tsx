@@ -16,10 +16,11 @@ export function ReportsScreen({
   return (
     <>
       <header>
-        <p className="eyebrow">Committed sessions only</p>
         <h1>Staff monthly report</h1>
+        <p className="calendar-sub">Committed sessions only.</p>
       </header>
       <section className="card report">
+        <div className="report-form">
         <label>
           Staff
           <select id="reportStaff">
@@ -37,6 +38,7 @@ export function ReportsScreen({
         <button className="primary" onClick={onGenerate}>
           Generate report
         </button>
+        </div>
         {report && (
           <>
             <h2>

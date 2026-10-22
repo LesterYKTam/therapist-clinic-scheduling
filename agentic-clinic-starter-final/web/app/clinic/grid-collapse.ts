@@ -3,6 +3,18 @@ import type { CardModel } from "./card-state.ts";
 
 export type Overflow = { start: number; end: number; keys: string[]; lane: number; lanes: number };
 
+export const MIN_LANE_PX = 90;
+
+/**
+ * How many side-by-side lanes a column can hold before sessions fold into
+ * "+N more": one per ~90px of column width, never fewer than 2 or more than 5.
+ * Before the width is measured (null) the old default of 3 applies.
+ */
+export function laneBudget(columnPx: number | null, minLane = MIN_LANE_PX) {
+  const maxLanes = columnPx && columnPx > 0 ? Math.min(5, Math.max(2, Math.floor(columnPx / minLane))) : 3;
+  return { maxLanes, shown: maxLanes - 1 };
+}
+
 /**
  * Lanes for one column, collapsing crowded clusters. A cluster that needs more
  * than `maxLanes` lanes keeps its first `shown` lanes as cards; everything in

@@ -2,6 +2,7 @@
 
 import { nameOf } from "./names";
 import type { ClinicState, Session, StageHandler } from "./types";
+import { useDialog } from "./use-dialog";
 
 // Lists the assigned therapists who would add no new conflict to the draft.
 export function WorkableOptionsDialog({
@@ -19,18 +20,19 @@ export function WorkableOptionsDialog({
   onStage: StageHandler;
   onClose: () => void;
 }) {
+  const { dialogProps, titleProps } = useDialog(onClose);
   return (
     <div className="modal">
-      <div className="dialog">
-        <h2>Workable options</h2>
+      <div className="dialog" {...dialogProps}>
+        <h2 {...titleProps}>Workable options</h2>
         <p>
-          {current.date} {current.time} · {nameOf(state.clients, current.client)} · Client. These assigned therapists introduce no new conflicts in the current draft.
+          {current.date} {current.time} · {nameOf(state.clients, current.client)}. These assigned therapists introduce no new conflicts in the current draft.
         </p>
         {options.length ? (
           <ol>
             {options.map((option) => (
               <li key={option.therapist}>
-                <strong>{nameOf(state.therapists, option.therapist)} · Therapist</strong> · Rank {option.rank} {option.suggested && <strong>· Suggested</strong>}{" "}
+                <strong>{nameOf(state.therapists, option.therapist)}</strong> · Rank {option.rank} {option.suggested && <strong>· Suggested</strong>}{" "}
                 <button
                   onClick={() =>
                     void onStage(pod, {

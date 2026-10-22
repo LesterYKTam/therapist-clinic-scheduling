@@ -1,6 +1,7 @@
 "use client";
 
 import { nameOf } from "./names";
+import { shortName } from "./resolve-model";
 import type { ClinicState, PodHandler, Session } from "./types";
 
 // The Auto resolve proposal: suggested moves, what is still unresolved, and
@@ -31,10 +32,10 @@ export function AutoResolveProposal({
         <ol>
           {proposal.proposed.map((item: any) => (
             <li key={item.change.sessionId}>
-              <strong>{session(item.change.sessionId)?.date} {session(item.change.sessionId)?.time} · {nameOf(state.clients, session(item.change.sessionId)?.client)} · Client</strong>
-              <span> Assign {nameOf(state.therapists, item.change.therapist || item.change.session?.therapist)} · Therapist · Rank {item.rank}</span>
+              <strong>{session(item.change.sessionId)?.date} {session(item.change.sessionId)?.time} · {nameOf(state.clients, session(item.change.sessionId)?.client)}</strong>
+              <span> with {shortName(nameOf(state.therapists, item.change.therapist || item.change.session?.therapist) || "")} · Rank {item.rank}</span>
               {item.displacedBy && (
-                <p>Moved because of {nameOf(state.clients, session(item.displacedBy)?.client)} · Client’s session.</p>
+                <p>Moved because of {nameOf(state.clients, session(item.displacedBy)?.client)}’s session.</p>
               )}
               {!item.displacedBy && item.causedBy?.length > 0 && <p>{item.causedBy.join("; ")}</p>}
             </li>
@@ -48,7 +49,7 @@ export function AutoResolveProposal({
         <ol>
           {proposal.unresolved.map((item: any) => (
             <li key={item.sessionId}>
-              {nameOf(state.clients, item.session?.client)} · Client: {item.reasons.join("; ")}
+              {nameOf(state.clients, item.session?.client)}: {item.reasons.join("; ")}
             </li>
           ))}
         </ol>
@@ -59,7 +60,7 @@ export function AutoResolveProposal({
         <ul>
           {proposal.stops.map((item: any) => (
             <li key={item.sessionId}>
-              {nameOf(state.clients, session(item.sessionId)?.client)} · Client: {item.reason}
+              {nameOf(state.clients, session(item.sessionId)?.client)}: {item.reason}
             </li>
           ))}
         </ul>

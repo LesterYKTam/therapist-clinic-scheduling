@@ -2,6 +2,7 @@
 
 import type { Dispatch, SetStateAction } from "react";
 import type { Client, ClinicState, DraftForm, Session, Therapist } from "./types";
+import { useDialog } from "./use-dialog";
 
 // The Add session / Edit session dialog. Edits to an existing session also
 // offer the cancel and "this + future" variants.
@@ -35,10 +36,11 @@ export function SessionDialog({
   onSubmit: () => void;
 }) {
   const editedSession = () => state.sessions.find((item) => item.id === editing)!;
+  const { dialogProps, titleProps } = useDialog(onBack);
   return (
     <div className="modal">
-      <div className="dialog">
-        <h2>{editing ? "Edit session" : "Add session"}</h2>
+      <div className="dialog" {...dialogProps}>
+        <h2 {...titleProps}>{editing ? "Edit session" : "Add session"}</h2>
         <label>
           Client
           <select

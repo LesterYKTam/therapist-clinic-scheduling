@@ -44,7 +44,7 @@ export function LeavePanel({
         <ol>
           {leaves.map((leave) => (
             <li key={leave.id}>
-              <strong>{therapist(leave.therapist)} · Therapist</strong>
+              <strong>{therapist(leave.therapist)}</strong>
               <span>
                 {leave.startDate} {leave.startTime} – {leave.endDate} {leave.endTime}
               </span>
