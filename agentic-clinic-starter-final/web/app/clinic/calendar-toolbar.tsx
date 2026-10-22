@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import type { CalendarView } from "./time-grid";
 
 export function CalendarHeader({
   conflictStatus,
@@ -36,21 +37,37 @@ export function CalendarHeader({
 }
 
 export function CalendarTools({
+  view,
+  title,
+  onView,
   onPrevious,
   onToday,
   onNext,
 }: {
+  view: CalendarView;
+  title: string;
+  onView: (view: CalendarView) => void;
   onPrevious: () => void;
   onToday: () => void;
   onNext: () => void;
 }) {
+  const unit = view === "day" ? "day" : "week";
   return (
-    <section className="calendar-tools">
-      <div>
-        <button onClick={onPrevious}>Previous week</button>
-        <button onClick={onToday}>Today</button>
-        <button onClick={onNext}>Next week</button>
+    <section className="calendar-tools" aria-label="Calendar view and dates">
+      <div className="view-switch" role="group" aria-label="Calendar view">
+        <button type="button" aria-pressed={view === "day"} onClick={() => onView("day")}>
+          Day by therapist
+        </button>
+        <button type="button" aria-pressed={view === "week"} onClick={() => onView("week")}>
+          Week
+        </button>
       </div>
+      <div className="date-nav">
+        <button onClick={onPrevious}>Previous {unit}</button>
+        <button onClick={onToday}>Today</button>
+        <button onClick={onNext}>Next {unit}</button>
+      </div>
+      <strong className="date-title" aria-live="polite">{title}</strong>
     </section>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 // @ts-expect-error The JavaScript scheduling policy is verified in the Node suite.
 import { draftCandidate } from "../../lib/scheduling.mjs";
 import { CalendarHeader, CalendarTools } from "./calendar-toolbar";
@@ -15,7 +15,9 @@ import { SessionDialog } from "./session-dialog";
 import type { ClinicActions } from "./use-clinic-actions";
 import type { Clinic } from "./use-clinic";
 import type { Selection } from "./types";
-import { WeekGrid } from "./week-grid";
+import { formatDay, TimeGrid, type CalendarView } from "./time-grid";
+
+const VIEW_KEY = "clinic.calendar.view";
 
 type CalendarScreenProps = Pick<
   Clinic,
@@ -90,17 +92,56 @@ export function CalendarScreen({
   readOnly,
 }: CalendarScreenProps) {
   const weekStart = state.config.weekStart;
-  const [week, setWeek] = useState(() =>
-    startOfWeek(today(state.config.timezone), weekStart),
-  );
+  const [anchor, setAnchor] = useState(() => today(state.config.timezone));
+  const [view, setView] = useState<CalendarView>("week");
+  // Restore the last view after mount, so the server and first client render agree.
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(VIEW_KEY);
+      if (saved === "day" || saved === "week") setView(saved);
+    } catch {
+      // Storage can be blocked; the default view is fine.
+    }
+  }, []);
+  const chooseView = (next: CalendarView) => {
+    setView(next);
+    try {
+      window.localStorage.setItem(VIEW_KEY, next);
+    } catch {
+      // Not remembering the view is harmless.
+    }
+  };
+  const week = startOfWeek(anchor, weekStart);
+  const shift = (date: string, days: number) => {
+    const value = new Date(`${date}T00:00:00Z`);
+    value.setUTCDate(value.getUTCDate() + days);
+    return value.toISOString().slice(0, 10);
+  };
   const [entryOpen, setEntryOpen] = useState(false);
   const [leaveOpen, setLeaveOpen] = useState(false);
   const [selection, setSelection] = useState<Selection | null>(null);
-  const dateAt = (offset: number) => {
-    const value = new Date(`${week}T00:00:00Z`);
-    value.setUTCDate(value.getUTCDate() + offset);
-    return value.toISOString().slice(0, 10);
+  const todayDate = today(state.config.timezone);
+  // One day at a time, skipping closed days that have no sessions.
+  const stepDay = (direction: number) => {
+    let next = shift(anchor, direction);
+    for (let tries = 0; tries < 7; tries++) {
+      const weekday = new Date(`${next}T00:00:00Z`).getUTCDay() || 7;
+      if (
+        state.config.workingDays.includes(weekday) ||
+        events.some((item: { date: string }) => item.date === next)
+      ) {
+        break;
+      }
+      next = shift(next, direction);
+    }
+    return next;
   };
+  const days =
+    view === "day" ? [anchor] : Array.from({ length: 7 }, (_, index) => shift(week, index));
+  const title =
+    view === "day"
+      ? `${anchor === todayDate ? "Today · " : ""}${formatDay(anchor)}`
+      : `${formatDay(days[0])} – ${formatDay(days[6])}`;
   const defaultEnd = (date: string) => defaultEndDate(date, state.config.recurrenceWeeks);
   const beginAdd = () => {
     const start = nextBookingDate(state.config);
@@ -147,16 +188,25 @@ export function CalendarScreen({
         onAdd={beginAdd}
       />
       <CalendarTools
-        onPrevious={() => setWeek(startOfWeek(dateAt(-7), weekStart))}
-        onToday={() => setWeek(startOfWeek(today(state.config.timezone), weekStart))}
-        onNext={() => setWeek(startOfWeek(dateAt(7), weekStart))}
+        view={view}
+        title={title}
+        onView={chooseView}
+        onPrevious={() => setAnchor(view === "day" ? stepDay(-1) : shift(anchor, -7))}
+        onToday={() => setAnchor(todayDate)}
+        onNext={() => setAnchor(view === "day" ? stepDay(1) : shift(anchor, 7))}
       />
       <div className="calendar-body">
-        <WeekGrid
+        <TimeGrid
+          view={view}
           state={state}
           pod={pod}
-          events={events}
-          dateAt={dateAt}
+          candidate={events}
+          days={days}
+          today={todayDate}
+          onOpenDay={(date) => {
+            setAnchor(date);
+            chooseView("day");
+          }}
           readOnly={readOnly}
           editingPod={editingPod}
           onSelect={(sessionId) => choose(sessionId, false)}

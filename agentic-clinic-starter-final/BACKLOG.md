@@ -969,7 +969,7 @@ Description: A new calendar view beside Week: hours down the side, one column pe
 Source / reason: Stillwell design guide; Reschedule Flow mockup
 Acceptance criteria: Every state shows its word as well as its colour. Concurrent sessions sit side by side. Today is tinted. No horizontal scroll at 1280px or wider. Closed days are hidden.
 Priority: P1
-Status: READY
+Status: DONE (2026-10-22). Day by therapist and Week time grid, side-by-side lanes, a "+N more" collapse for busy slots, and 6 card states with words. 106/106 tests pass. QA checked every state against the API in 5 scenarios with 0 errors; 4 findings fixed. Open: the pill clips to "Conf" in the narrowest Week cards at 1280px; re-check after UX-014 widens the grid.
 Sprint: S8
 Dependencies: UX-011
 Discovery class: ADJACENT
