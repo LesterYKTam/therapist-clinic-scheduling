@@ -334,3 +334,8 @@ The Stillwell design review raised five places where the resolve-panel mockup im
 4. Batch Auto resolve with review (D-B007) is kept. A guided one-conflict-at-a-time panel may present the same options the engine already computes, alongside an "Auto resolve all" action.
 5. The read-only view of other pods (D-B020) is kept. In the redesign its "View pod" control sits in the sidebar under the pod name.
 The PM updates the Claude design artifacts (the Stillwell design system and Stillwell Reschedule Flow) to match, and the repo snapshot in docs/design/stillwell is refreshed.
+
+## D-P048 — No usage cap for the S8 redesign sprint
+Status: APPROVED by explicit owner instruction, 2026-10-22
+
+For the S8 Stillwell redesign, the owner lifted the 70% usage stop (D-P043). The PM continues through the plan's usage windows until they actually run out. Extra paid usage is disabled on the account, so no paid overage is possible. If a limit runs out, the PM records the exact resume point and continues after the reset (D-P044). D-P043 applies again once S8 ends.
