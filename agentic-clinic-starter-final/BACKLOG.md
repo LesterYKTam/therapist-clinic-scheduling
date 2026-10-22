@@ -922,3 +922,78 @@ Status: DONE (2026-10-07). 89/89 tests pass. QA security check: about 120 bypass
 Sprint: Post-M3
 Dependencies: D-P046, M3
 Discovery class: ADJACENT
+
+## S8 — Stillwell redesign (owner-approved 2026-10-22; D-B021)
+Design source: docs/design/stillwell (Claude artifacts Stillwell v6 and Stillwell Reschedule Flow v3). Work happens on branch feature/stillwell-redesign. Each phase is checked by tests, a QA screenshot comparison and the owner's review before it merges to master. Scheduling rules must not change; all tests stay green.
+
+### DEBT-002
+Type: DEBT
+Title: Split the 48 KB clinic UI into components (redesign phase 0)
+Description: Break web/app/clinic-client.tsx into focused components and hooks (shell, calendar, conflict panel, draft panel, leave, setup, reports, dialogs), so each later redesign phase is small and reviewable.
+Source / reason: Owner-approved redesign plan; QA review (DEBT-001)
+Acceptance criteria: No behaviour or visual change. The headless screenshots of the calendar, the Auto resolve proposal and the read-only view are pixel-identical or show only trivial differences, which are explained. No file is over about 15 KB. Long one-line code is reformatted. All tests and the build pass. `any` types are reduced where cheap.
+Priority: P1
+Status: READY
+Sprint: S8
+Dependencies: none
+Discovery class: ADJACENT
+
+### UX-010
+Type: STORY
+Title: Stillwell tokens and Inter (redesign phase 1)
+Description: Generate CSS variables from docs/design/stillwell/design-system/tokens.json with a script, self-host Inter, and replace hard-coded colours, sizes and radii with tokens. No layout change.
+Source / reason: Stillwell design system v6
+Acceptance criteria: A token script produces a committed tokens.css. Text floor is 12px and body is 14px. Times use tabular numbers. A 2px focus ring is visible. QA confirms against the design guide.
+Priority: P1
+Status: READY
+Sprint: S8
+Dependencies: DEBT-002
+Discovery class: ADJACENT
+
+### UX-011
+Type: STORY
+Title: Stillwell shell (redesign phase 2)
+Description: Light sidebar with the pod name and role under the logo, a "View pod" control there (D-B021), and "Admin configuration" as a normal nav item. The header has "Add session" as the only primary button.
+Source / reason: Stillwell design guide; D-B021
+Acceptance criteria: Matches the guide's Sidebar and Header sections. The read-only view still works from the sidebar control.
+Priority: P1
+Status: READY
+Sprint: S8
+Dependencies: UX-010
+Discovery class: ADJACENT
+
+### UX-012
+Type: STORY
+Title: Day by therapist view and session states (redesign phase 3)
+Description: A new calendar view beside Week: hours down the side, one column per therapist, leave shaded, and session cards in the guide's states (committed, staged, conflict, cancelled, past). The Week view moves to the time grid and uses the same cards.
+Source / reason: Stillwell design guide; Reschedule Flow mockup
+Acceptance criteria: Every state shows its word as well as its colour. Concurrent sessions sit side by side. Today is tinted. No horizontal scroll at 1280px or wider. Closed days are hidden.
+Priority: P1
+Status: READY
+Sprint: S8
+Dependencies: UX-011
+Discovery class: ADJACENT
+
+### UX-013
+Type: STORY
+Title: Guided resolve panel (redesign phase 4)
+Description: Conflict list, then conflict detail (client, therapists at that hour, free rooms), then rank-ordered option cards built from the existing engine options (D-B021), then a calendar preview, then add to draft, then commit. "Auto resolve all" keeps batch Auto resolve.
+Source / reason: Reschedule Flow mockup v3; D-B021
+Acceptance criteria: The options and their order come only from the existing engine. There are no automatic time changes. Nothing is committed before Commit. Tests cover the panel's use of the engine options.
+Priority: P1
+Status: READY
+Sprint: S8
+Dependencies: UX-012
+Discovery class: ADJACENT
+
+### UX-014
+Type: STORY
+Title: Clean-up, Setup and Reports restyle (redesign phase 5)
+Description: Remove the old stacked side panel, give the draft editor and leave list their own tabs or drawers, show Setup panels side by side with a rooms table and day chips, and put the Reports form on one row with the content top-aligned.
+Source / reason: Stillwell design guide
+Acceptance criteria: Matches the guide's Setup, Reports and side-panel guidance. The screenshots are refreshed and the README images are updated.
+Priority: P2
+Status: READY
+Sprint: S8
+Dependencies: UX-013
+Discovery class: ADJACENT
