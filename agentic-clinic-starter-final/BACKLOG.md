@@ -933,7 +933,7 @@ Description: Break web/app/clinic-client.tsx into focused components and hooks (
 Source / reason: Owner-approved redesign plan; QA review (DEBT-001)
 Acceptance criteria: No behaviour or visual change. The headless screenshots of the calendar, the Auto resolve proposal and the read-only view are pixel-identical or show only trivial differences, which are explained. No file is over about 15 KB. Long one-line code is reformatted. All tests and the build pass. `any` types are reduced where cheap.
 Priority: P1
-Status: READY
+Status: DONE (2026-10-22). clinic-client.tsx went from 51 KB to 2.3 KB plus 22 files, the largest 10 KB. 89/89 tests pass. QA rendered the old and new versions: 26 screens byte-identical, all 13 action payloads identical, DOM identical apart from React text-node separators.
 Sprint: S8
 Dependencies: none
 Discovery class: ADJACENT

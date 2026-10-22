@@ -1,223 +1,72 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-// @ts-expect-error The JavaScript scheduling policy is verified in the Node suite.
-import { workableAssignments, draftCandidate, localInstant } from "../lib/scheduling.mjs";
-import { authClient } from "../lib/auth-client";
+import { CalendarScreen } from "./clinic/calendar-screen";
+import { ReportsScreen } from "./clinic/reports-screen";
+import { SetupScreen } from "./clinic/setup-screen";
+import { ConflictStatus, Notices, Sidebar } from "./clinic/shell";
+import type { ClinicState } from "./clinic/types";
+import { useClinic } from "./clinic/use-clinic";
+import { useClinicActions } from "./clinic/use-clinic-actions";
 
-type State = any;
-const call = async (body?: unknown, query = "") => {
-  const result = await fetch(`/api/clinic${query}`, body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : undefined);
-  const data = await result.json(); if (!result.ok) throw new Error(data.error || "Request failed."); return data;
-};
-const today = (timeZone = "America/Toronto") => { const parts=new Intl.DateTimeFormat("en-CA",{timeZone,year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date()); const part=(type:string)=>parts.find(item=>item.type===type)?.value; return `${part("year")}-${part("month")}-${part("day")}`; };
-const nextBookingDate = (config:any) => {
-  const current=today(config.timezone);
-  const parts=new Intl.DateTimeFormat('en-GB',{timeZone:config.timezone,hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date());
-  const hour=parts.find((item)=>item.type==='hour')?.value||'00', minute=parts.find((item)=>item.type==='minute')?.value||'00';
-  let date=current;
-  if (`${hour}:${minute}`>=config.open) date=new Date(new Date(`${current}T00:00:00Z`).getTime()+86400000).toISOString().slice(0,10);
-  for(let index=0;index<7;index++) {
-    const day=new Date(`${date}T00:00:00Z`).getUTCDay()||7;
-    if(config.workingDays.includes(day)) return date;
-    date=new Date(new Date(`${date}T00:00:00Z`).getTime()+86400000).toISOString().slice(0,10);
-  }
-  return date;
-};
-
-export default function ClinicClient({ initial, authenticated = false }: { initial: State; authenticated?: boolean }) {
-  const [state, setState] = useState(initial), [screen, setScreen] = useState("calendar"), [notice, setNotice] = useState(""), [failure, setFailure] = useState("");
-  const [draft, setDraft] = useState<any>({ kind: "one-off", client: "a-c1", therapist: "a-t1", date: today(), time: "09:00", minutes: 60, location: "clinic", room: "room-1", endDate: "" });
-  const [preview, setPreview] = useState<any>(null), [report, setReport] = useState<any>(null), [editing, setEditing] = useState<any>(null);
-  const [editingPod,setEditingPod] = useState<string|null>(null);
-  const [calendarPod,setCalendarPod] = useState<string>(initial.viewPod||initial.pods[0]?.id||"");
-  const readOnly = authenticated && !!state.readOnly; // D-B020: another pod is view-only; demo mode has one trusted admin.
-  const podName = (id:string) => (state.allPods||state.pods).find((item:any)=>item.id===id)?.name||id;
-  useEffect(()=>{ const saved=sessionStorage.getItem("clinic-editing-pod"); if(saved&&initial.pods.some((item:any)=>item.id===saved)) setEditingPod(saved); else sessionStorage.removeItem("clinic-editing-pod"); },[initial.pods]);
-  useEffect(()=>{ if(editingPod) { setCalendarPod(editingPod); setScreen("calendar"); } },[editingPod]);
-  const staff = useMemo(() => state.therapists.filter((item: any) => item.active), [state]);
-  const clients = useMemo(() => state.clients.filter((item: any) => item.active), [state]);
-  const podConflictCount=(state.conflicts||[]).filter((issue:any)=>state.clients.find((client:any)=>client.id===issue.session.client)?.pod===calendarPod).length;
-  const reload = async () => { const next = await call(undefined, authenticated&&state.viewPod?`?viewPod=${encodeURIComponent(state.viewPod)}`:""); setState(next); const marker=sessionStorage.getItem("clinic-editing-pod"); if(!next.readOnly&&marker&&!next.drafts?.some((item:any)=>item.pod===marker&&(item.changes.length||item.autoResolveRun))) { sessionStorage.removeItem("clinic-editing-pod"); setEditingPod(null); } };
-  const perform = async (fn: () => Promise<void>) => { setFailure(""); setNotice(""); try { await fn(); return true; } catch (caught) { setFailure(caught instanceof Error ? caught.message : "Unable to complete request."); return false; } };
-  const switchPod = (id:string) => perform(async () => { if(!authenticated){ setCalendarPod(id); return; } const next=await call(undefined,`?viewPod=${encodeURIComponent(id)}`); setState(next); setCalendarPod(id); setPreview(null); setEditing(null); setReport(null); });
-  const change = (name: string, value: string) => setDraft((previous: any) => ({ ...previous, [name]: name === "minutes" ? Number(value) : value, ...(name === "location" && value === "home" ? { room: null } : {}) }));
-  const selectedClient = clients.find((client: any) => client.id === draft.client);
-  const canUse = (therapist: any) => selectedClient?.assigned.includes(therapist.id);
-  const previewDraft = () => perform(async () => {
-    if (draft.kind==="one-off"||draft.kind==="weekly") {
-      const pod=state.clients.find((item:any)=>item.id===draft.client)?.pod;
-      if (!pod) throw new Error("Choose a client in a valid pod.");
-      if (editingPod&&editingPod!==pod) throw new Error("Commit or discard the current pod draft before editing another pod.");
-      await call({action:"stage-draft-add",pod,revision:state.revision,...draft});
-      sessionStorage.setItem("clinic-editing-pod",pod); setEditingPod(pod);
-      await reload(); setNotice("Session added to the shared draft. Review conflicts before commit.");
-      return;
-    }
-    if(editingPod) throw new Error("Use the shared draft controls to edit existing sessions before committing.");
-    const result = await call({ action: "preview", ...draft }); setPreview({ ...result, request: draft }); setNotice("Preview ready. Nothing has been saved.");
-  });
-  const beginEdit = (session: any, future = false, cancel = false) => { setEditing(session.id); setDraft({ kind: cancel ? (future ? "cancel-future" : "cancel-occurrence") : (future ? "edit-future" : "edit-occurrence"), occurrenceId: session.id, client: session.client, therapist: session.therapist, date: session.date, startDate: session.date, endDate: state.series.find((series: any) => series.id === session.seriesId)?.endDate || session.date, time: session.time, minutes: session.minutes, location: session.location, room: session.room }); };
-  const commit = () => perform(async () => { await call({ action: "commit", revision: preview.revision, ...preview.request }); await reload(); setPreview(null); setNotice("Committed to the calendar."); });
-  const loadReport = () => perform(async () => { const month = (document.getElementById("month") as HTMLInputElement).value; const therapist = (document.getElementById("reportStaff") as HTMLSelectElement).value; const value = await fetch(`/api/clinic?reportStaff=${encodeURIComponent(therapist)}&month=${encodeURIComponent(month)}`).then((r) => r.json()); if (value.error) throw new Error(value.error); setReport(value); });
-  const recordLeave = (leave: any) => perform(async () => { await call({ action: "record-leave", revision: state.revision, leave }); await reload(); setNotice("Leave recorded. Schedule conflicts have been refreshed."); });
-  const amendLeave = (pod:string, leaveId:string, leave:any) => perform(async () => { await call({action:"amend-leave",pod,leaveId,leave,revision:state.revision}); await reload(); setNotice("Recorded leave updated. Schedule conflicts have been refreshed."); });
-  const withdrawLeave = (pod:string, leaveId:string) => perform(async () => { await call({action:"withdraw-leave",pod,leaveId,revision:state.revision}); await reload(); setNotice("Recorded leave withdrawn. Schedule conflicts have been refreshed."); });
-  const recheckConflicts = () => perform(async () => { await reload(); setNotice("Schedule conflicts rechecked against the latest committed schedule."); });
-  const removeDraftChange = (pod:string, sessionId:string) => perform(async () => { await call({action:"remove-draft-change",pod,sessionId,revision:state.revision}); await reload(); setNotice("Staged change removed from the shared draft. The committed schedule is unchanged."); });
-  const stageDraft = (pod:string, change:any) => perform(async () => { await call({action:"stage-draft",pod,change,revision:state.revision}); sessionStorage.setItem("clinic-editing-pod",pod); setEditingPod(pod); await reload(); setNotice("Change saved in the shared draft. The committed schedule is unchanged."); });
-  const previewAutoResolve = (pod:string) => perform(async () => { await call({action:"preview-auto-resolve",pod,revision:state.revision}); sessionStorage.setItem("clinic-editing-pod",pod); setEditingPod(pod); await reload(); setNotice("Auto resolve proposal is ready for review. The committed calendar is unchanged."); });
-  const applyAutoResolve = (pod:string) => perform(async () => { await call({action:"apply-auto-resolve",pod,revision:state.revision}); await reload(); setNotice("Suggestions added to the shared draft. Review remaining issues before commit."); });
-  const discardAutoResolve = (pod:string) => perform(async () => { await call({action:"discard-auto-resolve",pod,revision:state.revision}); await reload(); setNotice("Suggestions discarded. You can keep editing the shared draft manually."); });
-  const commitSharedDraft = (pod:string) => perform(async () => { await call({action:"commit-draft",pod,revision:state.revision}); sessionStorage.removeItem("clinic-editing-pod"); setEditingPod(null); await reload(); setNotice("Shared draft committed to the calendar."); });
-  const discardSharedDraft = (pod:string) => perform(async () => { await call({action:"discard-draft",pod,revision:state.revision}); sessionStorage.removeItem("clinic-editing-pod"); setEditingPod(null); await reload(); setNotice("Shared draft discarded. Recorded leave remains in place."); });
-  const handleNotification = (pod:string, taskId:string) => perform(async () => { await call({action:"handle-notification",pod,taskId,revision:state.revision}); await reload(); setNotice("Notification task marked handled."); });
-
-  return <main className="workspace">
-    <aside><div className="brand">Stillwell</div><p>CLINIC WORKSPACE</p>{["calendar", "setup", "reports"].map((item) => <button key={item} className={screen === item ? "nav active" : "nav"} disabled={!!editingPod&&item!=="calendar"} onClick={() => setScreen(item)}>{item === "calendar" ? "Calendar" : item[0].toUpperCase() + item.slice(1)}</button>)}{authenticated&&<><a href="/config/admins">Admin configuration</a><button onClick={async()=>{await authClient.signOut();window.location.assign("/sign-in");}}>Sign out</button></>}<small>{state.pods.find((item:any)=>item.id===calendarPod)?.name||"Selected pod"} · {authenticated?"Admin":"Local admin"}</small></aside>
-    <section className="content"><button className={podConflictCount ? "conflict-status active" : "conflict-status clear"} onClick={() => { setScreen("calendar"); void recheckConflicts(); }} aria-label={podConflictCount ? `${podConflictCount} schedule conflicts. Open Calendar.` : "No conflicts. Open Calendar."}>{podConflictCount ? `⚠ ${podConflictCount} Schedule conflicts` : "✓ No conflicts"}</button>{readOnly&&<p className="notice" role="status">Viewing {podName(state.viewPod)} — read-only. You can edit only {podName(state.assignedPod)}.</p>}{notice && <p className="notice">{notice}</p>}{failure && <p className="notice error" role="alert">{failure}</p>}
-      {screen === "calendar" && <CalendarScreen state={state} pod={calendarPod} setPod={switchPod} readOnly={readOnly} draft={draft} setDraft={setDraft} previewDraft={previewDraft} preview={preview} setPreview={setPreview} commit={commit} editing={editing} setEditing={setEditing} beginEdit={beginEdit} clients={clients} staff={staff} canUse={canUse} change={change} onRecordLeave={recordLeave} onAmendLeave={amendLeave} onWithdrawLeave={withdrawLeave} onRecheck={recheckConflicts} onStageDraft={stageDraft} onRemoveDraftChange={removeDraftChange} onPreviewAuto={previewAutoResolve} onApplyAuto={applyAutoResolve} onDiscardAuto={discardAutoResolve} onCommitDraft={commitSharedDraft} onDiscardDraft={discardSharedDraft} onHandleNotification={handleNotification} editingPod={editingPod} />}
-      {screen === "setup" && <fieldset disabled={readOnly} style={{border:0,padding:0,margin:0,minWidth:0}}><SetupV2 state={state} readOnly={readOnly} onSaved={async (next: any) => perform(async () => { await call({ action: "setup", revision: state.revision, setup: next }); await reload(); setNotice("Setup saved."); })} /></fieldset>}
-      {screen === "reports" && <><header><p className="eyebrow">Committed sessions only</p><h1>Staff monthly report</h1></header><section className="card report"><label>Staff<select id="reportStaff">{state.therapists.map((item: any) => <option key={item.id} value={item.id}>{item.name} · Therapist{item.active?"":" · Inactive"}</option>)}</select></label><label>Month<input id="month" type="month" defaultValue={today(state.config.timezone).slice(0, 7)} /></label><button className="primary" onClick={loadReport}>Generate report</button>{report && <><h2>{report.staff.name} · Therapist · {report.month}</h2>{report.sessions.length ? <table><thead><tr><th>Date</th><th>Time</th><th>Client</th><th>Duration</th><th>Location</th></tr></thead><tbody>{report.sessions.map((item: any) => <tr key={item.id}><td>{item.date}</td><td>{item.time}</td><td>{item.clientName} · Client</td><td>{item.minutes} minutes</td><td>{item.locationName}</td></tr>)}</tbody></table> : <p>No committed sessions for this month.</p>}<p><strong>Total: {report.totalMinutes} minutes</strong></p><a className="report-download" href={`/api/clinic/report?staff=${encodeURIComponent(report.staff.id)}&month=${encodeURIComponent(report.month)}`}>Download PDF</a><button onClick={() => window.print()}>Print / save PDF</button></>}</section></>}
-    </section></main>;
+export default function ClinicClient({
+  initial,
+  authenticated = false,
+}: {
+  initial: ClinicState;
+  authenticated?: boolean;
+}) {
+  const clinic = useClinic(initial, authenticated);
+  const actions = useClinicActions(clinic);
+  const { state, screen, setScreen, editingPod, calendarPod, readOnly } = clinic;
+  return (
+    <main className="workspace">
+      <Sidebar
+        screen={screen}
+        setScreen={setScreen}
+        editingPod={editingPod}
+        authenticated={authenticated}
+        podLabel={state.pods.find((item) => item.id === calendarPod)?.name}
+      />
+      <section className="content">
+        <ConflictStatus
+          count={clinic.podConflictCount}
+          onOpen={() => {
+            setScreen("calendar");
+            void actions.recheckConflicts();
+          }}
+        />
+        <Notices
+          readOnly={readOnly}
+          state={state}
+          podName={clinic.podName}
+          notice={clinic.notice}
+          failure={clinic.failure}
+        />
+        {screen === "calendar" && (
+          <CalendarScreen
+            {...actions}
+            state={state}
+            pod={calendarPod}
+            setPod={clinic.switchPod}
+            readOnly={readOnly}
+            draft={clinic.draft}
+            setDraft={clinic.setDraft}
+            preview={clinic.preview}
+            setPreview={clinic.setPreview}
+            editing={clinic.editing}
+            setEditing={clinic.setEditing}
+            clients={clinic.clients}
+            staff={clinic.staff}
+            editingPod={editingPod}
+          />
+        )}
+        {screen === "setup" && (
+          <SetupScreen state={state} readOnly={readOnly} onSaved={actions.saveSetup} />
+        )}
+        {screen === "reports" && (
+          <ReportsScreen state={state} report={clinic.report} onGenerate={actions.loadReport} />
+        )}
+      </section>
+    </main>
+  );
 }
-
-function SetupV2({state,onSaved,readOnly=false}:{state:State,onSaved:(next:State)=>void,readOnly?:boolean}) {
-  const [next,setNext]=useState(()=>structuredClone(state)); const [pod,setPod]=useState(state.pods[0]?.id||"");
-  useEffect(()=>setNext(structuredClone(state)),[state]);
-  const config=(key:string,value:any)=>setNext((old:any)=>({...old,config:{...old.config,[key]:value}}));
-  const update=(collection:string,id:string,key:string,value:any)=>setNext((old:any)=>({...old,[collection]:old[collection].map((item:any)=>item.id===id?{...item,[key]:value}:item)}));
-  const addRoom=()=>setNext((old:any)=>({...old,rooms:[...old.rooms,{id:`room-${crypto.randomUUID()}`,name:`Room ${old.rooms.length+1}`,active:true}]}));
-  const addTherapist=()=>setNext((old:any)=>({...old,therapists:[...old.therapists,{id:`staff-${crypto.randomUUID()}`,pod,name:"New therapist",capHours:20,active:true}]}));
-  const addClient=()=>setNext((old:any)=>{const assigned=old.therapists.filter((item:any)=>item.pod===pod).slice(0,3).map((item:any)=>item.id);return {...old,clients:[...old.clients,{id:`client-${crypto.randomUUID()}`,pod,name:"New client",active:true,assigned}]};});
-  return <><header><p className="eyebrow">Infrequent clinic configuration</p><h1>Setup</h1><p>Changes are checked against every committed booking before saving.</p>{readOnly&&<p>Setup is read-only while you view another pod. Switch back to your own pod to edit.</p>}</header><div className="grid"><section className="card"><h2>Calendar settings</h2><label>Timezone<input value={next.config.timezone} onChange={e=>config("timezone",e.target.value)}/></label><div className="two"><label>Open<input type="time" value={next.config.open} onChange={e=>config("open",e.target.value)}/></label><label>Close<input type="time" value={next.config.close} onChange={e=>config("close",e.target.value)}/></label></div><label>Default recurrence weeks<input type="number" min="1" max="104" value={next.config.recurrenceWeeks} onChange={e=>config("recurrenceWeeks",Number(e.target.value))}/></label><label>Auto resolve cascade depth<select value={next.config.cascadeDepth} onChange={e=>config("cascadeDepth",Number(e.target.value))}><option value="0">0 · No displaced sessions</option><option value="1">1 · One displaced session</option><option value="2">2 · Up to two displaced sessions</option></select></label><label>Week starts<select value={next.config.weekStart} onChange={e=>config("weekStart",Number(e.target.value))}>{[1,2,3,4,5,6,7].map(day=><option key={day} value={day}>{["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"][day-1]}</option>)}</select></label><div className="day-checks">{[1,2,3,4,5,6,7].map(day=><label className="check" key={day}>{["Mon","Tue","Wed","Thu","Fri","Sat","Sun"][day-1]}<input type="checkbox" checked={next.config.workingDays.includes(day)} onChange={e=>config("workingDays",e.target.checked?[...next.config.workingDays,day].sort():next.config.workingDays.filter((value:number)=>value!==day))}/></label>)}</div></section><section className="card"><h2>Shared rooms</h2><p>Turn off Active to remove a room from future bookings. Existing future reservations must be moved first; past reservations remain readable.</p>{next.rooms.map((room:any)=><div className="row" key={room.id}><input value={room.name} aria-label="Room name" onChange={e=>update("rooms",room.id,"name",e.target.value)}/><label className="check">Active<input type="checkbox" checked={room.active} onChange={e=>update("rooms",room.id,"active",e.target.checked)}/></label></div>)}<button onClick={addRoom}>Add room</button></section><section className="card"><h2>Staff</h2>{next.therapists.map((staff:any)=><div className="person" key={staff.id}><input value={staff.name} aria-label="Staff name" onChange={e=>update("therapists",staff.id,"name",e.target.value)}/><span>{next.pods.find((item:any)=>item.id===staff.pod)?.name} · Therapist</span><div className="two"><label>Weekly cap<input type="number" min="1" max="80" value={staff.capHours} onChange={e=>update("therapists",staff.id,"capHours",Number(e.target.value))}/></label><label className="check">Active<input type="checkbox" checked={staff.active} onChange={e=>update("therapists",staff.id,"active",e.target.checked)}/></label></div></div>)}<label>New person pod<select value={pod} onChange={e=>setPod(e.target.value)}>{next.pods.map((item:any)=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label><button onClick={addTherapist}>Add therapist</button></section><section className="card"><h2>Clients and ranked therapists</h2>{next.clients.map((client:any)=><div className="person" key={client.id}><input value={client.name} aria-label="Client name" onChange={e=>update("clients",client.id,"name",e.target.value)}/><span>{next.pods.find((item:any)=>item.id===client.pod)?.name} · Client</span><label className="check">Active<input type="checkbox" checked={client.active} onChange={e=>update("clients",client.id,"active",e.target.checked)}/></label>{[0,1,2].map(rank=><label key={rank}>Rank {rank+1}<select value={client.assigned[rank]} onChange={e=>update("clients",client.id,"assigned",client.assigned.map((id:string,index:number)=>index===rank?e.target.value:id))}>{next.therapists.filter((staff:any)=>staff.pod===client.pod).map((staff:any)=><option key={staff.id} value={staff.id}>{staff.name} · Therapist</option>)}</select></label>)}</div>)}<button onClick={addClient}>Add client</button></section></div><button className="primary" onClick={()=>onSaved(next)}>Check impact and save setup</button></>;
-}
-
-function CalendarScreen({state,pod,setPod,draft,setDraft,previewDraft,preview,setPreview,commit,editing,setEditing,beginEdit,clients,staff,canUse,change,onRecordLeave,onAmendLeave,onWithdrawLeave,onRecheck,onStageDraft,onRemoveDraftChange,onPreviewAuto,onApplyAuto,onDiscardAuto,onCommitDraft,onDiscardDraft,onHandleNotification,editingPod,readOnly}:any) {
-  const startOfWeek=(value:string)=>{const d=new Date(`${value}T00:00:00Z`);d.setUTCDate(d.getUTCDate()-((d.getUTCDay()-state.config.weekStart+7)%7));return d.toISOString().slice(0,10);};
-  const [week,setWeek]=useState(()=>{const d=new Date(`${today(state.config.timezone)}T00:00:00Z`);d.setUTCDate(d.getUTCDate()-((d.getUTCDay()-state.config.weekStart+7)%7));return d.toISOString().slice(0,10);}), [entryOpen,setEntryOpen]=useState(false), [leaveOpen,setLeaveOpen]=useState(false);
-  const [selection,setSelection]=useState<{sessionId:string;openOptions:boolean;key:number}|null>(null);
-  const dateAt=(offset:number)=>{ const value=new Date(`${week}T00:00:00Z`); value.setUTCDate(value.getUTCDate()+offset); return value.toISOString().slice(0,10); };
-  const defaultEnd=(date:string)=>new Date(new Date(`${date}T00:00:00Z`).getTime()+((state.config.recurrenceWeeks-1)*7*86400000)).toISOString().slice(0,10);
-  const beginAdd=()=>{ const start=nextBookingDate(state.config); const end=defaultEnd(start); const client=clients.find((c:any)=>c.pod===pod); const therapist=client?.assigned.map((id:string)=>staff.find((person:any)=>person.id===id)).find(Boolean)?.id||""; setEditing(null); setDraft({kind:"one-off",client:client?.id||"",therapist,date:start,time:state.config.open,minutes:60,location:"clinic",room:state.rooms.find((r:any)=>r.active)?.id||"",endDate:end,defaultEndDate:end}); setEntryOpen(true); };
-  const candidate=state.drafts?.some((item:any)=>item.pod===pod)?draftCandidate(state,pod).candidate:state;
-  const events=candidate.sessions.filter((item:any)=>state.clients.find((c:any)=>c.id===item.client)?.pod===pod);
-  const submit=async()=>{ if(await previewDraft()) setEntryOpen(false); };
-  const label=(id:string,kind:"client"|"staff")=>{const source=kind==="client"?state.clients:state.therapists; return source.find((item:any)=>item.id===id)?.name||id;};
-  return <><header className="calendar-head"><div><p className="eyebrow">{editingPod?"Shared schedule draft":"Committed normal scheduling"}</p><h1>Calendar</h1><p>Preview every change before it is committed.</p></div><div className="calendar-actions">{!readOnly&&<button onClick={()=>setLeaveOpen(true)}>Record leave</button>}<button onClick={onRecheck}>Recheck conflicts</button>{!readOnly&&<button className="primary" onClick={beginAdd}>Add session</button>}</div></header><section className="calendar-tools"><label>{state.assignedPod?"View pod":"Pod"}<select value={pod} disabled={!!editingPod} onChange={e=>setPod(e.target.value)}>{(state.allPods||state.pods).map((item:any)=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label><div><button onClick={()=>setWeek(startOfWeek(dateAt(-7)))}>Previous week</button><button onClick={()=>setWeek(startOfWeek(today(state.config.timezone)))}>Today</button><button onClick={()=>setWeek(startOfWeek(dateAt(7)))}>Next week</button></div></section><div className="calendar-body"><section className="week-grid">{Array.from({length:7},(_,index)=>{const date=dateAt(index);const day=events.filter((item:any)=>item.date===date);return <div className="day-column" key={date}><strong>{new Intl.DateTimeFormat("en-CA",{timeZone:"UTC",weekday:"short",month:"short",day:"numeric"}).format(new Date(`${date}T00:00:00Z`))}</strong>{day.length?day.sort((a:any,b:any)=>a.time.localeCompare(b.time)).map((item:any)=><button className={state.sessions.some((saved:any)=>saved.id===item.id)?"event":"event draft-event"} key={item.id} onClick={()=>{if(readOnly)return;if(editingPod||state.drafts?.some((draft:any)=>draft.pod===pod)||localInstant(item.date,item.time,state.config.timezone)<Date.now()||!state.sessions.some((saved:any)=>saved.id===item.id)){setSelection({sessionId:item.id,openOptions:false,key:Date.now()});}else{beginEdit(item);setEntryOpen(true);}}}><b>{item.time}</b><span>{label(item.client,"client")} · Client</span><span>{label(item.therapist,"staff")} · Therapist</span><small>{item.location==="home"?"Home":state.rooms.find((r:any)=>r.id===item.room)?.name}</small></button>):<span className="empty-day">No sessions</span>}</div>})}</section><div><ConflictPanel state={state} pod={pod} readOnly={readOnly} onRecheck={onRecheck} onChoose={(sessionId:string,openOptions:boolean)=>setSelection({sessionId,openOptions,key:Date.now()})} /><DraftPanel state={state} pod={pod} readOnly={readOnly} onStage={onStageDraft} onRemove={onRemoveDraftChange} onPreviewAuto={onPreviewAuto} onApplyAuto={onApplyAuto} onDiscardAuto={onDiscardAuto} onCommit={onCommitDraft} onDiscard={onDiscardDraft} selection={selection} /><NotificationPanel state={state} pod={pod} readOnly={readOnly} onHandle={onHandleNotification} /><LeavePanel state={state} pod={pod} readOnly={readOnly} onAmend={onAmendLeave} onWithdraw={onWithdrawLeave} /></div></div>{leaveOpen&&!readOnly&&<LeaveForm state={state} pod={pod} onClose={()=>setLeaveOpen(false)} onRecord={async (leave:any)=>{const saved=await onRecordLeave(leave);if(saved) setLeaveOpen(false);return saved;}} />}{entryOpen&&!readOnly&&<div className="modal"><div className="dialog"><h2>{editing?"Edit session":"Add session"}</h2><label>Client<select value={draft.client} onChange={e=>{const chosen=clients.find((item:any)=>item.id===e.target.value);const therapist=chosen?.assigned.find((id:string)=>staff.some((person:any)=>person.id===id))||"";setDraft((previous:any)=>({...previous,client:e.target.value,therapist}));}}>{clients.filter((c:any)=>c.pod===pod).map((item:any)=><option value={item.id} key={item.id}>{item.name} · Client</option>)}</select></label><label>Therapist<select value={draft.therapist} onChange={e=>change("therapist",e.target.value)}>{staff.filter((s:any)=>s.pod===pod).map((item:any)=><option disabled={!canUse(item)} value={item.id} key={item.id}>{item.name} · Therapist · {item.capHours} h/week</option>)}</select></label><div className="two"><label>Date<input type="date" value={draft.date} onChange={e=>setDraft((p:any)=>{const nextDate=e.target.value;const nextDefault=defaultEnd(nextDate);return {...p,date:nextDate,startDate:nextDate,endDate:p.endDate===p.defaultEndDate?nextDefault:p.endDate,defaultEndDate:nextDefault};})}/></label><label>Time<input type="time" value={draft.time} onChange={e=>change("time",e.target.value)}/></label></div><div className="two"><label>Duration<input type="number" min="15" max="480" step="15" value={draft.minutes} onChange={e=>change("minutes",e.target.value)}/></label><label>Location<select value={draft.location} onChange={e=>change("location",e.target.value)}><option value="clinic">Clinic</option><option value="home">Home</option></select></label></div>{draft.location==="clinic"&&<label>Shared room<select value={draft.room} onChange={e=>change("room",e.target.value)}>{state.rooms.filter((r:any)=>r.active).map((r:any)=><option key={r.id} value={r.id}>{r.name}</option>)}</select></label>}{!editing&&<label className="check"><input type="checkbox" checked={draft.kind==="weekly"} onChange={e=>setDraft((p:any)=>{const nextDefault=defaultEnd(p.date);return {...p,kind:e.target.checked?"weekly":"one-off",startDate:p.date,endDate:p.endDate===p.defaultEndDate||!p.endDate?nextDefault:p.endDate,defaultEndDate:nextDefault};})}/> Repeat weekly</label>}{["weekly","edit-future"].includes(draft.kind)&&<label>Required end date<input type="date" value={draft.endDate} onChange={e=>change("endDate",e.target.value)}/></label>}<button onClick={()=>setEntryOpen(false)}>Back</button><button className="primary" onClick={submit}>{!editing?"Stage session":"Preview change"}</button>{editing&&<div className="manage-modal"><button onClick={()=>{beginEdit(state.sessions.find((item:any)=>item.id===editing),false,true);}}>Cancel this</button>{state.sessions.find((item:any)=>item.id===editing)?.seriesId&&<><button onClick={()=>beginEdit(state.sessions.find((item:any)=>item.id===editing),true)}>Edit this + future</button><button onClick={()=>beginEdit(state.sessions.find((item:any)=>item.id===editing),true,true)}>Cancel this + future</button></>}</div>}</div></div>}{preview&&!readOnly&&<div className="modal"><div className="dialog"><h2>Preview ready</h2><p>{preview.occurrences.length} changed and {preview.removed.length} removed. The calendar is unchanged until you commit.</p><ul>{preview.occurrences.map((item:any)=><li key={item.id}>{item.date} · {item.time} · {item.minutes} min · {label(item.client,"client")} · Client · {label(item.therapist,"staff")} · Therapist · {item.location==="home"?"Home":state.rooms.find((r:any)=>r.id===item.room)?.name}</li>)}{preview.removed.map((item:any)=><li key={item.id}>Remove {item.date} · {item.time} · {label(item.client,"client")} · Client</li>)}</ul><button onClick={()=>{setPreview(null);setEntryOpen(true);}}>Back to edit</button><button className="primary" onClick={commit}>Commit schedule</button></div></div>}</>;
-}
-
-function ConflictPanel({state,pod,readOnly=false,onRecheck,onChoose}:{state:State,pod:string,readOnly?:boolean,onRecheck:()=>void,onChoose:(sessionId:string,openOptions:boolean)=>void}) {
-  const conflicts=(state.conflicts || []).filter((item:any)=>state.clients.find((client:any)=>client.id===item.session.client)?.pod===pod);
-  const historical=(state.historicalAlerts || []).filter((item:any)=>state.clients.find((client:any)=>client.id===item.session.client)?.pod===pod);
-  const name=(items:any[],id:string)=>items.find((item:any)=>item.id===id)?.name || id;
-  return <aside className="conflict-panel"><div className="conflict-panel-head"><h2>Schedule conflicts · {conflicts.length}</h2><button onClick={onRecheck}>Recheck conflicts</button></div>{conflicts.length ? <ol>{conflicts.map((item:any)=><li key={item.sessionId}><strong>{item.session.date} · {item.session.time}</strong><span>{name(state.clients,item.session.client)} · Client</span><span>{name(state.therapists,item.session.therapist)} · Therapist</span><small>{item.session.minutes} minutes · {item.session.location==="home"?"Home":name(state.rooms,item.session.room)}</small>{!readOnly&&<button onClick={()=>onChoose(item.sessionId,localInstant(item.session.date,item.session.time,state.config.timezone)>=Date.now())}>{localInstant(item.session.date,item.session.time,state.config.timezone)>=Date.now()?"Review options":"View conflict"}</button>}<p>Recorded leave: {item.leaves.map((leave:any)=>`${leave.startDate} ${leave.startTime} – ${leave.endDate} ${leave.endTime}`).join("; ")}</p></li>)}</ol> : <p>No conflicts for this pod.</p>}{historical.length>0&&<section className="historical-alerts" aria-label="Historical alerts"><h3>Historical alerts · {historical.length}</h3><p>These sessions already started while recorded leave overlapped them. They are kept as a record and do not block scheduling.</p><ol>{historical.map((item:any)=><li key={item.sessionId}><strong>{item.session.date} · {item.session.time}</strong><span>{name(state.clients,item.session.client)} · Client</span><span>{name(state.therapists,item.session.therapist)} · Therapist</span><p>Recorded leave: {item.leaves.map((leave:any)=>`${leave.startDate} ${leave.startTime} – ${leave.endDate} ${leave.endTime}`).join("; ")}</p></li>)}</ol></section>}</aside>;
-}
-
-function DraftPanel({state,pod,readOnly=false,onStage,onRemove,onPreviewAuto,onApplyAuto,onDiscardAuto,onCommit,onDiscard,selection}:{state:State,pod:string,readOnly?:boolean,onStage:(pod:string,change:any)=>Promise<boolean>,onRemove:(pod:string,sessionId:string)=>Promise<boolean>,onPreviewAuto:(pod:string)=>Promise<boolean>,onApplyAuto:(pod:string)=>Promise<boolean>,onDiscardAuto:(pod:string)=>Promise<boolean>,onCommit:(pod:string)=>Promise<boolean>,onDiscard:(pod:string)=>Promise<boolean>,selection:{sessionId:string;openOptions:boolean;key:number}|null}) {
-  const [selected,setSelected]=useState("");
-  const [therapist,setTherapist]=useState("");
-  const [optionsOpen,setOptionsOpen]=useState(false);
-  useEffect(()=>{if(selection){setSelected(selection.sessionId);setTherapist("");if(selection.openOptions)setOptionsOpen(true);}},[selection]);
-  const draft=state.drafts?.find((item:any)=>item.pod===pod);
-  const proposal=draft?.proposal;
-  const issues=state.draftIssues?.[pod] || [];
-  const sessions=draftCandidate(state,pod).candidate.sessions.filter((item:any)=>state.clients.find((client:any)=>client.id===item.client)?.pod===pod);
-  const current=sessions.find((item:any)=>item.id===selected) || sessions.find((item:any)=>localInstant(item.date,item.time,state.config.timezone)>=Date.now()) || sessions[0];
-  const editable=!!current&&localInstant(current.date,current.time,state.config.timezone)>=Date.now();
-  const client=state.clients.find((item:any)=>item.id===current?.client);
-  const ranked=state.therapists.filter((item:any)=>item.active&&client?.assigned.includes(item.id));
-  const target=ranked.some((item:any)=>item.id===therapist)?therapist:ranked[0]?.id;
-  const safeOptions=current?(state.workableOptions?.[current.id] ?? workableAssignments(state,pod,current.id)):[];
-  const name=(items:any[],id:string)=>items.find((item:any)=>item.id===id)?.name||id;
-  const session=(id:string)=>sessions.find((item:any)=>item.id===id);
-  return <section className="conflict-panel">
-    <h2>Shared schedule draft</h2>
-    <p>Changes here stay separate from committed sessions until you commit.</p>
-    <div className="calendar-actions">{!readOnly&&<button onClick={()=>void onPreviewAuto(pod)}>Auto resolve</button>}{!readOnly&&draft?.autoResolveRun&&!proposal&&<small>Auto resolve has run for this draft. It can run again once the draft or the pod’s schedule inputs change.</small>}</div>
-    {proposal&&<div className="person" aria-label="Auto resolve proposal">
-      <h3>Auto resolve proposal · {proposal.proposed.length} changed sessions</h3>
-      <p>Review all suggested moves. Nothing in the committed calendar has changed.</p>
-      {proposal.proposed.length?<ol>{proposal.proposed.map((item:any)=><li key={item.change.sessionId}>
-        <strong>{session(item.change.sessionId)?.date} {session(item.change.sessionId)?.time} · {name(state.clients,session(item.change.sessionId)?.client)} · Client</strong>
-        <span> Assign {name(state.therapists,item.change.therapist||item.change.session?.therapist)} · Therapist · Rank {item.rank}</span>
-        {item.displacedBy&&<p>Moved because of {name(state.clients,session(item.displacedBy)?.client)} · Client’s session.</p>}
-        {!item.displacedBy&&item.causedBy?.length>0&&<p>{item.causedBy.join('; ')}</p>}
-      </li>)}</ol>:<p>No safe automatic changes were found.</p>}
-      <h3>Still unresolved · {proposal.unresolved.length}</h3>
-      {proposal.unresolved.length?<ol>{proposal.unresolved.map((item:any)=><li key={item.sessionId}>{name(state.clients,item.session?.client)} · Client: {item.reasons.join('; ')}</li>)}</ol>:<p>No conflicts remain in this proposal.</p>}
-      {proposal.stops.length>0&&<ul>{proposal.stops.map((item:any)=><li key={item.sessionId}>{name(state.clients,session(item.sessionId)?.client)} · Client: {item.reason}</li>)}</ul>}
-      {state.proposalStale?.[pod]&&<p role="alert">The shared schedule changed after this proposal. Discard these suggestions and continue manually.</p>}
-      {!readOnly&&<div className="calendar-actions"><button onClick={()=>void onDiscardAuto(pod)}>Discard suggestions</button><button className="primary" disabled={state.proposalStale?.[pod]||!proposal.proposed.length} onClick={()=>void onApplyAuto(pod)}>Apply to draft</button></div>}
-    </div>}
-    {!readOnly&&!proposal&&sessions.length>0&&<>
-      <label>Session<select value={current?.id||""} onChange={e=>{setSelected(e.target.value);setTherapist("");}}>{sessions.map((item:any)=><option value={item.id} key={item.id}>{item.date} {item.time} · {name(state.clients,item.client)} · Client</option>)}</select></label>
-      {editable&&<label>Assign therapist<select value={target||""} onChange={e=>setTherapist(e.target.value)}>{ranked.map((item:any)=><option value={item.id} key={item.id}>{item.name} · Therapist</option>)}</select></label>}
-      {!editable&&<p>This session has already started and cannot be changed.</p>}
-      {editable&&<><div className="calendar-actions"><button onClick={()=>setOptionsOpen(true)}>Review workable options</button><button disabled={!target} onClick={()=>void onStage(pod,{kind:"assign",sessionId:current.id,therapist:target})}>Stage assignment</button><button onClick={()=>void onStage(pod,{kind:"cancel",sessionId:current.id})}>Stage cancellation</button></div>
-      <RescheduleDraftForm key={`${pod}:${current?.id}`} state={state} pod={pod} session={current} onStage={onStage} /></>}
-    </>}
-    {draft&&<>
-      <h3>Proposed changes · {draft.changes.length}</h3>
-      {draft.changes.length?<ol>{draft.changes.map((change:any)=><li key={change.sessionId}>{name(state.clients,(session(change.sessionId)||state.sessions?.find((item:any)=>item.id===change.sessionId)||change.session)?.client)} · Client: {change.kind==="add"?`Add ${change.session.date} ${change.session.time} for ${change.session.minutes} minutes · ${name(state.therapists,change.session.therapist)} · Therapist`:change.kind==="cancel"?"Cancel session":change.kind==="reschedule"?`Move to ${change.date} ${change.time} for ${change.minutes} minutes · ${name(state.therapists,change.therapist)} · Therapist`:`Assign ${name(state.therapists,change.therapist)} · Therapist`} {!readOnly&&<button onClick={()=>void onRemove(pod,change.sessionId)}>Remove change</button>}</li>)}</ol>:<p>No schedule changes yet.</p>}
-      <h3>Outstanding in draft · {issues.length}</h3>
-      {issues.length?<ol>{issues.map((issue:any)=><li key={issue.sessionId}><strong>{issue.session?.date} {issue.session?.time}</strong> · {name(state.clients,issue.session?.client)} · Client<ul>{issue.reasons.map((reason:string)=><li key={reason}>{reason}</li>)}</ul></li>)}</ol>:<p>No conflicts in this draft.</p>}
-      {!readOnly&&<div className="calendar-actions"><button onClick={()=>void onDiscard(pod)}>Discard draft</button><button className="primary" disabled={!!proposal||!draft.changes.length||issues.length>0} onClick={()=>void onCommit(pod)}>Commit schedule</button></div>}
-    </>}
-    {optionsOpen&&!readOnly&&current&&<div className="modal"><div className="dialog"><h2>Workable options</h2><p>{current.date} {current.time} · {name(state.clients,current.client)} · Client. These assigned therapists introduce no new conflicts in the current draft.</p>{safeOptions.length?<ol>{safeOptions.map((option:any)=><li key={option.therapist}><strong>{name(state.therapists,option.therapist)} · Therapist</strong> · Rank {option.rank} {option.suggested&&<strong>· Suggested</strong>} <button onClick={()=>void onStage(pod,{kind:"assign",sessionId:current.id,therapist:option.therapist}).then((saved)=>{if(saved)setOptionsOpen(false);})}>Use option</button></li>)}</ol>:<p>No conflict-free therapist assignment is available. You can close this and edit the draft manually.</p>}<button onClick={()=>setOptionsOpen(false)}>Close</button></div></div>}
-  </section>;
-}
-function NotificationPanel({state,pod,readOnly=false,onHandle}:{state:State,pod:string,readOnly?:boolean,onHandle:(pod:string,taskId:string)=>Promise<boolean>}) {
-  const tasks=(state.notifications||[]).filter((item:any)=>item.pod===pod&&item.status==='pending');
-  const name=(items:any[],id:string)=>items.find((item:any)=>item.id===id)?.name||id;
-  const details=(session:any)=>session?`${session.date} at ${session.time} · ${session.minutes} minutes · ${name(state.clients,session.client)} · Client · ${name(state.therapists,session.therapist)} · Therapist · ${session.location==='home'?'Home':session.roomName||name(state.rooms,session.room)}`:'None';
-  const items=(task:any):any[]=>Array.isArray(task.items)?task.items:[{sessionId:task.sessionId,changeType:task.changeType,before:task.before,after:task.after}]; // Old per-session tasks read as one item.
-  const kind=(type:string)=>type==='added'?'New':type==='cancelled'?'Cancelled':'Changed';
-  return <section className="conflict-panel" aria-label="Notification worklist"><h2>Notification worklist · {tasks.length}</h2><p>These tasks are created only after a schedule commit. No messages are sent automatically.</p>{tasks.length?<ol>{tasks.map((task:any)=><li key={task.id}><strong>{task.recipientRole==='client'?name(state.clients,task.recipientId):name(state.therapists,task.recipientId)} · {task.recipientRole==='client'?'Client':'Therapist'} · {items(task).length} session {items(task).length===1?'change':'changes'}</strong>{items(task).map((item:any)=><div key={item.sessionId}><span>{kind(item.changeType)} session</span>{item.before&&<span>Before: {details(item.before)}</span>}{item.after&&<span>After: {details(item.after)}</span>}{!item.before&&!item.after&&<small>Session {item.sessionId}</small>}</div>)}{!readOnly&&<button onClick={()=>void onHandle(pod,task.id)}>Mark handled</button>}</li>)}</ol>:<p>No pending notification tasks for this pod.</p>}</section>;
-}
-
-function LeavePanel({state,pod,readOnly=false,onAmend,onWithdraw}:{state:State,pod:string,readOnly?:boolean,onAmend:(pod:string,leaveId:string,leave:any)=>Promise<boolean>,onWithdraw:(pod:string,leaveId:string)=>Promise<boolean>}) {
-  const leaves=(state.leaves||[]).filter((item:any)=>item.pod===pod);
-  const [editing,setEditing]=useState<string|null>(null);
-  const [form,setForm]=useState<any>(null);
-  const blocked=state.drafts?.some((draft:any)=>draft.pod===pod);
-  const therapist=(id:string)=>state.therapists.find((item:any)=>item.id===id)?.name||id;
-  const start=(leave:any)=>{setEditing(leave.id);setForm({startDate:leave.startDate,startTime:leave.startTime,endDate:leave.endDate,endTime:leave.endTime});};
-  const put=(key:string,value:string)=>setForm((old:any)=>({...old,[key]:value}));
-  return <section className="conflict-panel" aria-label="Recorded leave"><h2>Recorded leave · {leaves.length}</h2>{blocked&&!readOnly&&<p>Commit or discard this pod’s shared draft before changing recorded leave.</p>}{leaves.length?<ol>{leaves.map((leave:any)=><li key={leave.id}><strong>{therapist(leave.therapist)} · Therapist</strong><span>{leave.startDate} {leave.startTime} – {leave.endDate} {leave.endTime}</span>{readOnly?null:editing===leave.id&&form?<div><div className="two"><label>Starts on<input type="date" value={form.startDate} onChange={e=>put('startDate',e.target.value)}/></label><label>At<input type="time" value={form.startTime} onChange={e=>put('startTime',e.target.value)}/></label></div><div className="two"><label>Ends on<input type="date" value={form.endDate} onChange={e=>put('endDate',e.target.value)}/></label><label>At<input type="time" value={form.endTime} onChange={e=>put('endTime',e.target.value)}/></label></div><button onClick={()=>{setEditing(null);setForm(null);}}>Cancel edit</button><button disabled={!!blocked} onClick={()=>void onAmend(pod,leave.id,form).then((saved)=>{if(saved){setEditing(null);setForm(null);}})}>Save leave</button></div>:<div><button disabled={!!blocked} onClick={()=>start(leave)}>Edit leave</button><button disabled={!!blocked} onClick={()=>void onWithdraw(pod,leave.id)}>Withdraw leave</button></div>}</li>)}</ol>:<p>No leave recorded for this pod.</p>}</section>;
-}
-
-function RescheduleDraftForm({state,pod,session,onStage}:{state:State,pod:string,session:any,onStage:(pod:string,change:any)=>Promise<boolean>}) {
-  const saved=state.drafts?.find((item:any)=>item.pod===pod)?.changes.find((item:any)=>item.sessionId===session.id);
-  const source=saved?.kind==='reschedule'?saved:session;
-  const [form,setForm]=useState<any>({therapist:source.therapist,date:source.date,time:source.time,minutes:source.minutes,location:source.location,room:source.room});
-  const client=state.clients.find((item:any)=>item.id===session.client);
-  const therapists=state.therapists.filter((item:any)=>item.active&&client?.assigned.includes(item.id));
-  const put=(key:string,value:any)=>setForm((previous:any)=>({...previous,[key]:value,...(key==='location'&&value==='home'?{room:null}:{})}));
-  return <div className="person"><h3>Move or change duration</h3><label>Therapist<select value={form.therapist} onChange={e=>put('therapist',e.target.value)}>{therapists.map((item:any)=><option value={item.id} key={item.id}>{item.name} · Therapist</option>)}</select></label><div className="two"><label>Date<input type="date" value={form.date} onChange={e=>put('date',e.target.value)}/></label><label>Time<input type="time" value={form.time} onChange={e=>put('time',e.target.value)}/></label></div><div className="two"><label>Duration in minutes<input type="number" min="1" max="480" value={form.minutes} onChange={e=>put('minutes',Number(e.target.value))}/></label><label>Location<select value={form.location} onChange={e=>put('location',e.target.value)}><option value="clinic">Clinic</option><option value="home">Home</option></select></label></div>{form.location==='clinic'&&<label>Shared room<select value={form.room||''} onChange={e=>put('room',e.target.value)}>{state.rooms.filter((item:any)=>item.active).map((item:any)=><option value={item.id} key={item.id}>{item.name}</option>)}</select></label>}<button onClick={()=>void onStage(pod,{kind:'reschedule',sessionId:session.id,...form})}>Stage reschedule</button></div>;
-}
-
-function LeaveForm({state,pod,onClose,onRecord}:{state:State,pod:string,onClose:()=>void,onRecord:(leave:any)=>Promise<boolean>}) {
-  const staff=state.therapists.filter((item:any)=>item.pod===pod&&item.active);
-  const [leave,setLeave]=useState<any>({therapist:staff[0]?.id||"",startDate:today(state.config.timezone),startTime:state.config.open,endDate:today(state.config.timezone),endTime:state.config.close});
-  const set=(key:string,value:string)=>setLeave((old:any)=>({...old,[key]:value}));
-  return <div className="modal"><div className="dialog"><h2>Record therapist leave</h2><p>This saves the leave now. Any affected sessions stay on the committed calendar as schedule conflicts until resolved.</p><label>Therapist<select value={leave.therapist} onChange={e=>set("therapist",e.target.value)}>{staff.map((item:any)=><option key={item.id} value={item.id}>{item.name} · Therapist</option>)}</select></label><div className="two"><label>Starts on<input type="date" value={leave.startDate} onChange={e=>set("startDate",e.target.value)}/></label><label>At<input type="time" value={leave.startTime} onChange={e=>set("startTime",e.target.value)}/></label></div><div className="two"><label>Ends on<input type="date" value={leave.endDate} onChange={e=>set("endDate",e.target.value)}/></label><label>At<input type="time" value={leave.endTime} onChange={e=>set("endTime",e.target.value)}/></label></div><p>For a whole working day, use the clinic opening and closing times. Partial-day and multi-day intervals are supported.</p><div className="calendar-actions"><button onClick={onClose}>Back</button><button className="primary" disabled={!leave.therapist} onClick={()=>void onRecord(leave)}>Record leave</button></div></div></div>;
-}
-
-function Setup({ state, onSaved }: { state: State, onSaved: (next: State) => void }) {
-  const [next, setNext] = useState(() => structuredClone(state));
-  useEffect(() => setNext(structuredClone(state)), [state]);
-  const patchConfig = (key: string, value: any) => setNext((old: any) => ({ ...old, config: { ...old.config, [key]: value } }));
-  const editTherapist = (id:string, key:string, value:any) => setNext((old:any) => ({...old, therapists:old.therapists.map((item:any) => item.id===id ? {...item,[key]:value}:item)}));
-  const editClient = (id:string, key:string, value:any) => setNext((old:any) => ({...old, clients:old.clients.map((item:any) => item.id===id ? {...item,[key]:value}:item)}));
-  const [newPod,setNewPod]=useState(state.pods[0]?.id || "");
-  const addTherapist = () => setNext((old:any) => ({...old, therapists:[...old.therapists,{id:`staff-${crypto.randomUUID()}`,pod:newPod,name:"New therapist",capHours:20,active:true}]}));
-  const addClient = () => setNext((old:any) => { const choices=old.therapists.filter((staff:any)=>staff.pod===newPod).slice(0,3).map((staff:any)=>staff.id); return {...old,clients:[...old.clients,{id:`client-${crypto.randomUUID()}`,pod:newPod,name:"New client",active:true,assigned:choices}]}; });
-  const addRoom = () => setNext((old:any) => ({...old,rooms:[...old.rooms,{id:`room-${crypto.randomUUID()}`,name:`Room ${old.rooms.length+1}`,active:true}]}));
-  return <><header><p className="eyebrow">Infrequent clinic configuration</p><h1>Setup</h1><p>Changes are checked against every committed booking before saving.</p></header><div className="grid"><section className="card"><h2>Calendar settings</h2><label>Timezone<input value={next.config.timezone} onChange={(e) => patchConfig("timezone", e.target.value)} /></label><div className="two"><label>Open<input type="time" value={next.config.open} onChange={(e) => patchConfig("open", e.target.value)} /></label><label>Close<input type="time" value={next.config.close} onChange={(e) => patchConfig("close", e.target.value)} /></label></div><label>Weekly recurrence limit<input type="number" min="1" max="104" value={next.config.recurrenceWeeks} onChange={(e) => patchConfig("recurrenceWeeks", Number(e.target.value))} /></label></section><section className="card"><h2>Shared rooms</h2><p>Turn off Active to remove a room from future bookings. Existing future reservations must be moved first; past reservations remain readable.</p>{next.rooms.map((room: any) => <div className="row" key={room.id}><span>{room.name}</span><label className="check"><input type="checkbox" checked={room.active} onChange={(e) => setNext((old: any) => ({ ...old, rooms: old.rooms.map((value: any) => value.id === room.id ? { ...value, active: e.target.checked } : value) }))} /> Active</label></div>)}</section><section className="card"><h2>Staff</h2>{next.therapists.map((staff:any)=><div className="person" key={staff.id}><input value={staff.name} aria-label="Staff name" onChange={e=>editTherapist(staff.id,"name",e.target.value)}/><div className="two"><label>Weekly cap<input type="number" min="1" max="80" value={staff.capHours} onChange={e=>editTherapist(staff.id,"capHours",Number(e.target.value))}/></label><label className="check">Active<input type="checkbox" checked={staff.active} onChange={e=>editTherapist(staff.id,"active",e.target.checked)}/></label></div></div>)}<button onClick={addTherapist}>Add therapist</button></section><section className="card"><h2>Clients and ranked therapists</h2>{next.clients.map((client:any)=><div className="person" key={client.id}><input value={client.name} aria-label="Client name" onChange={e=>editClient(client.id,"name",e.target.value)}/><label className="check">Active<input type="checkbox" checked={client.active} onChange={e=>editClient(client.id,"active",e.target.checked)}/></label>{[0,1,2].map(rank=><label key={rank}>Rank {rank+1}<select value={client.assigned[rank]} onChange={e=>editClient(client.id,"assigned",client.assigned.map((id:string,index:number)=>index===rank?e.target.value:id))}>{next.therapists.filter((staff:any)=>staff.pod===client.pod).map((staff:any)=><option key={staff.id} value={staff.id}>{staff.name}</option>)}</select></label>)}</div>)}<button onClick={addClient}>Add client</button></section></div><button className="primary" onClick={() => onSaved(next)}>Check impact and save setup</button></>;
-}
-
-
-
-
-
