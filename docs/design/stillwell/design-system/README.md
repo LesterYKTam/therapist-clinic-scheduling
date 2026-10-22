@@ -101,6 +101,16 @@ Rules:
 
 Every interactive element shows a 2px `focus-ring` outline offset 2px.
 
+## Business rules the design must respect
+
+These are scheduling rules the clinic owner has decided. The design shows them; it doesn't change them. A new design idea that would change one goes to the owner as a decision first. The source of truth is the project's `DECISIONS.md`; this summary reflects D-B021.
+
+- **Option order follows therapist rank.** When a session needs a new therapist, the 2nd-ranked therapist is suggested first, then the 3rd. No "best fit" ranking by familiarity.
+- **The 3rd-ranked therapist never moves anyone else.** They are offered only if free at the original time. Only the 2nd-ranked path may move other sessions, within the clinic's cascade-depth setting.
+- **Suggestions never change a session's time.** Moving a session to another time is a manual edit in the draft.
+- **Two ways to resolve, same results.** Guided, one conflict at a time, and "Auto resolve all" for many at once. Both stage changes into the draft for review; nothing is committed until the admin commits.
+- **Every admin can view every pod read-only.** The "View pod" control sits in the sidebar under the pod name. Viewing another pod hides all editing controls.
+
 ## Not decided yet
 
 - Dark mode (the tokens are named so it can be added later).

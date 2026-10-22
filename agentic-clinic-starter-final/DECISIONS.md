@@ -323,3 +323,14 @@ The owner approved M3, which is tagged milestone/M3 and merged to master. The re
 Status: APPROVED by explicit owner instruction, 2026-10-07
 
 The owner directed that the portfolio polish (README screenshots and the AGENTIC_WORKFLOW.md case study) be completed now, despite the 5-hour window being at 68%. Extra paid usage is disabled on the account, so no paid overage is possible. D-P043 resumes as the standing rule after this task.
+
+## D-B021 — The Stillwell redesign keeps the existing scheduling rules
+Status: APPROVED by explicit owner answer, 2026-10-22
+
+The Stillwell design review raised five places where the resolve-panel mockup implied different business rules. The owner chose to keep the existing logic in all five:
+1. Options are ordered by therapist rank (2nd-ranked suggested first, then 3rd), per SPEC §4 rule 2 and §5. There is no "Best fit" ranking by familiarity, and no familiarity data is added.
+2. The 3rd-ranked fallback is tried only at the original time and never displaces another session (D-B007, D-B014).
+3. Automatic proposals never change a session's time. Time moves remain a manual draft edit, and Q-002 stays open.
+4. Batch Auto resolve with review (D-B007) is kept. A guided one-conflict-at-a-time panel may present the same options the engine already computes, alongside an "Auto resolve all" action.
+5. The read-only view of other pods (D-B020) is kept. In the redesign its "View pod" control sits in the sidebar under the pod name.
+The PM updates the Claude design artifacts (the Stillwell design system and Stillwell Reschedule Flow) to match, and the repo snapshot in docs/design/stillwell is refreshed.

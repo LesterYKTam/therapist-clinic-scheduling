@@ -21,7 +21,13 @@ button:focus-visible{outline:2px solid #2f7f7a;outline-offset:2px}
 
   <nav aria-label="Main" style="flex: 1 1 200px; max-width: 220px; box-sizing: border-box; padding: 24px 16px; background: #eef2f1; border-right: 1px solid #d9e1df; display: flex; flex-direction: column; gap: 4px;">
     <div style="font-size: 20px; line-height: 28px; font-weight: 700; padding: 0 8px;">Stillwell</div>
-    <div style="font-size: 12px; line-height: 16px; color: #5b6b69; padding: 0 8px 20px;">Maple pod · Admin</div>
+    <div style="font-size: 12px; line-height: 16px; color: #5b6b69; padding: 0 8px 8px;">Maple pod · Admin</div>
+    <label style="display: flex; flex-direction: column; gap: 4px; padding: 0 8px 20px; font-size: 12px; line-height: 16px; font-weight: 500; color: #5b6b69;">View pod
+      <select style="font-family: inherit; font-size: 14px; line-height: 20px; color: #1f2a2a; background: #ffffff; border: 1px solid #7d8e8b; border-radius: 6px; padding: 5px 8px;">
+        <option>Maple pod</option>
+        <option>Cedar pod (read-only)</option>
+      </select>
+    </label>
     <a href="#" style="display: block; padding: 8px 12px; border-radius: 6px; background: #e3f0ee; color: #1d5e59; font-weight: 600; text-decoration: none;">Calendar</a>
     <a href="#" style="display: block; padding: 8px 12px; border-radius: 6px; color: #1f2a2a; text-decoration: none;">Setup</a>
     <a href="#" style="display: block; padding: 8px 12px; border-radius: 6px; color: #1f2a2a; text-decoration: none;">Reports</a>
@@ -100,9 +106,14 @@ button:focus-visible{outline:2px solid #2f7f7a;outline-offset:2px}
 
         <sc-if value="{{showList}}" hint-placeholder-val="{{ true }}">
           <section style="background: #ffffff; border: 1px solid #d9e1df; border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 12px;">
-            <div>
-              <h2 style="margin: 0; font-size: 16px; line-height: 24px; font-weight: 600;">Conflicts</h2>
-              <div style="font-size: 12px; line-height: 16px; color: #5b6b69;">Morgan Testerson is on leave Tue, Oct 27 – Wed, Oct 28</div>
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;">
+              <div>
+                <h2 style="margin: 0; font-size: 16px; line-height: 24px; font-weight: 600;">Conflicts</h2>
+                <div style="font-size: 12px; line-height: 16px; color: #5b6b69;">Morgan Testerson is on leave Tue, Oct 27 – Wed, Oct 28</div>
+              </div>
+              <sc-if value="{{hasOpen}}" hint-placeholder-val="{{ true }}">
+                <button onClick="{{autoAll}}" style="flex: 0 0 auto; border: 1px solid #7d8e8b; background: #ffffff; color: #1f2a2a; border-radius: 6px; padding: 6px 12px;">Auto resolve all</button>
+              </sc-if>
             </div>
             <sc-if value="{{hasOpen}}" hint-placeholder-val="{{ true }}">
               <div style="display: flex; flex-direction: column; gap: 8px;">
@@ -165,7 +176,7 @@ button:focus-visible{outline:2px solid #2f7f7a;outline-offset:2px}
                     <span style="font-size: 12px; font-weight: 600; color: #1d5e59; background: #e3f0ee; border-radius: 4px; padding: 1px 6px;">{{o.tag}}</span>
                   </span>
                   <span style="display: flex; flex-direction: column; gap: 2px; font-size: 12px; line-height: 16px;">
-                    <span><span style="color: #5b6b69;">Fit</span> <span style="color: {{o.fitColor}}; font-weight: 500;">{{o.fit}}</span></span>
+                    <span><span style="color: #5b6b69;">Rank</span> <span style="color: {{o.fitColor}}; font-weight: 500;">{{o.fit}}</span></span>
                     <span><span style="color: #5b6b69;">Availability</span> <span style="color: {{o.availColor}}; font-weight: 500;">{{o.avail}}</span></span>
                     <span><span style="color: #5b6b69;">Room</span> <span style="color: #2e7d4f; font-weight: 500;">{{o.room}}</span></span>
                   </span>
@@ -239,37 +250,33 @@ class Component extends DCLogic {
 
   info() {
     return {
-      s1: 'Weekly with Morgan. Has seen Casey 8 times.',
-      s2: 'Weekly with Morgan. Has seen Taylor 4 times.',
-      s3: 'Weekly with Morgan. Has seen Taylor 5 times.'
+      s1: 'Weekly with Morgan. Ranked therapists: Morgan · Taylor · Casey.',
+      s2: 'Weekly with Morgan. Ranked therapists: Morgan · Taylor · Casey.',
+      s3: 'Weekly with Morgan. Ranked therapists: Morgan · Taylor · Casey.'
     };
   }
 
+  // Options follow the clinic's approved rules (D-B021): ranked order (2nd-ranked first, then 3rd),
+  // the 3rd-ranked therapist only at the original time and never moving anyone else, and no automatic time changes.
   opts() {
     return {
       s1: [
-        { id: 'a', title: 'Casey takes this session', tag: 'Best fit', fit: 'Seen Alex 8 times', good: true, avail: 'Busy at 09:00, needs 1 more change', availOk: false, room: 'Room 1 stays',
-          changes: [ { sid: 's1', to: 'casey', h: 9, room: 'Room 1', text: 'Alex Sampleton → Casey T., 09:00, Room 1' },
-                     { sid: 's7', to: 'taylor', h: 9, room: 'Room 3', text: 'Jules Sampleton → Taylor T., 09:00, Room 3 (seen Taylor 2 times)' } ] },
-        { id: 'b', title: 'Taylor takes this session', tag: 'Fewest changes', fit: 'First session with Alex', good: false, avail: 'Free 09:00 – 10:00', availOk: true, room: 'Room 1 stays',
+        { id: 'a', title: 'Taylor takes this session', tag: 'Suggested', fit: '2nd-ranked therapist', good: true, avail: 'Free 09:00 – 10:00', availOk: true, room: 'Room 1 stays',
           changes: [ { sid: 's1', to: 'taylor', h: 9, room: 'Room 1', text: 'Alex Sampleton → Taylor T., 09:00, Room 1' } ] },
         { id: 'c', title: 'Cancel this session', tag: 'Last resort', fit: 'Client misses this week', good: false, avail: 'No therapist needed', availOk: true, room: 'Room 1 freed',
           changes: [ { sid: 's1', cancel: true, text: 'Cancel Alex Sampleton, 09:00' } ] }
       ],
       s2: [
-        { id: 'a', title: 'Taylor takes this session', tag: 'Best fit', fit: 'Seen Bailey 4 times', good: true, avail: 'Free 11:00 – 12:00', availOk: true, room: 'Room 1 stays',
+        { id: 'a', title: 'Taylor takes this session', tag: 'Suggested', fit: '2nd-ranked therapist', good: true, avail: 'Free 11:00 – 12:00', availOk: true, room: 'Room 1 stays',
           changes: [ { sid: 's2', to: 'taylor', h: 11, room: 'Room 1', text: 'Bailey Sampleton → Taylor T., 11:00, Room 1' } ] },
-        { id: 'b', title: 'Casey takes this session', tag: 'Alternative', fit: 'First session with Bailey', good: false, avail: 'Busy at 11:00, needs 1 more change', availOk: false, room: 'Room 1 stays',
-          changes: [ { sid: 's2', to: 'casey', h: 11, room: 'Room 1', text: 'Bailey Sampleton → Casey T., 11:00, Room 1' },
-                     { sid: 's8', to: 'casey', h: 16, room: 'Room 3', text: 'Dana Sampleton moves to 16:00 with Casey T., Room 3' } ] },
         { id: 'c', title: 'Cancel this session', tag: 'Last resort', fit: 'Client misses this week', good: false, avail: 'No therapist needed', availOk: true, room: 'Room 1 freed',
           changes: [ { sid: 's2', cancel: true, text: 'Cancel Bailey Sampleton, 11:00' } ] }
       ],
       s3: [
-        { id: 'a', title: 'Taylor takes this session', tag: 'Best fit', fit: 'Seen Charlie 5 times', good: true, avail: 'Busy at 13:00, needs 1 more change', availOk: false, room: 'Room 1 stays',
+        { id: 'a', title: 'Taylor takes this session', tag: 'Suggested', fit: '2nd-ranked therapist', good: true, avail: 'Busy at 13:00, needs 1 more change', availOk: false, room: 'Room 1 stays',
           changes: [ { sid: 's3', to: 'taylor', h: 13, room: 'Room 1', text: 'Charlie Sampleton → Taylor T., 13:00, Room 1' },
-                     { sid: 's5', to: 'casey', h: 13, room: 'Room 2', text: 'Frankie Sampleton → Casey T., 13:00, Room 2 (first session)' } ] },
-        { id: 'b', title: 'Casey takes this session', tag: 'Fewest changes', fit: 'First session with Charlie', good: false, avail: 'Free 13:00 – 14:00', availOk: true, room: 'Room 1 stays',
+                     { sid: 's5', to: 'casey', h: 13, room: 'Room 2', text: 'Frankie Sampleton → Casey T., 13:00, Room 2 (same time; Casey is Frankie\'s next-ranked)' } ] },
+        { id: 'b', title: 'Casey takes this session', tag: 'Rank 3', fit: '3rd-ranked therapist', good: false, avail: 'Free 13:00 – 14:00', availOk: true, room: 'Room 1 stays',
           changes: [ { sid: 's3', to: 'casey', h: 13, room: 'Room 1', text: 'Charlie Sampleton → Casey T., 13:00, Room 1' } ] },
         { id: 'c', title: 'Cancel this session', tag: 'Last resort', fit: 'Client misses this week', good: false, avail: 'No therapist needed', availOk: true, room: 'Room 1 freed',
           changes: [ { sid: 's3', cancel: true, text: 'Cancel Charlie Sampleton, 13:00' } ] }
@@ -427,6 +434,12 @@ class Component extends DCLogic {
         const staged = st.staged.concat(add);
         const rest = this.openIds(staged);
         this.setState({ staged: staged, sel: rest.length ? rest[0] : null, opt: null, done: 0 });
+      },
+      autoAll: () => {
+        // Batch Auto resolve (D-B007): stage each open conflict's suggested option into the draft for review.
+        const add = [];
+        open.forEach((id) => { OPTS[id][0].changes.forEach((c) => add.push(Object.assign({ conflictId: id }, c))); });
+        this.setState({ staged: st.staged.concat(add), sel: null, opt: null, done: 0 });
       },
       discard: () => this.setState({ staged: [], sel: null, opt: null }),
       commit: () => {

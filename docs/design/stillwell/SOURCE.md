@@ -4,13 +4,13 @@ The **living design** is kept in Claude design artifacts. This folder is a **ver
 
 | Snapshot folder | Artifact | Type | Version pulled |
 |---|---|---|---|
-| `design-system/` | [Stillwell](https://claude.ai/artifact/JAZ7rLaUMm7mLz9awYhHLB) | Design System | `1792638006-51a1` |
-| `reschedule-flow/` | [Stillwell Reschedule Flow](https://claude.ai/artifact/7LB66mDBf8Jb23cmJRkL9G) | Design (canvas) | `1792638776-7b07` |
+| `design-system/` | [Stillwell](https://claude.ai/artifact/JAZ7rLaUMm7mLz9awYhHLB) | Design System | `1792639864-8672` (v6) |
+| `reschedule-flow/` | [Stillwell Reschedule Flow](https://claude.ai/artifact/7LB66mDBf8Jb23cmJRkL9G) | Design (canvas) | `1792639840-314d` (v3) |
 | `IMPLEMENTATION.md` | the design hand-off note (exported zip, 2026-10-21) | — | — |
 
 The artifacts are private to the owner's Claude account, so the links work only for the owner.
 
-Pulled 2026-10-22. The files are byte-identical to the exported `stillwell-design.zip`, checked against `tokens.json` and the mockup.
+Pulled 2026-10-22. First pull was byte-identical to the exported `stillwell-design.zip`. Updated the same day by the PM to apply D-B021: the mockup option rules, "Auto resolve all", the "View pod" control, and the design guide's "Business rules the design must respect" section.
 
 ## What each file is
 - `design-system/README.md`: the design guide, covering principles, voice, colour, session states, typography, spacing and per-screen guidance.
@@ -21,5 +21,5 @@ Pulled 2026-10-22. The files are byte-identical to the exported `stillwell-desig
 - `reschedule-flow/canvas.json`: the canvas index. It links the mockup to the Stillwell design system.
 
 ## Status in this project
-- The redesign plan and its open business-rule questions are tracked by the PM. Some of the mockup's resolve-panel option logic conflicts with approved rules (SPEC §5, D-B007, D-B014). See the PM review before implementing phase 4.
+- The five design-versus-rule conflicts were resolved by D-B021 (keep the existing logic), and both artifacts were updated to match.
 - No app code uses these files yet.
