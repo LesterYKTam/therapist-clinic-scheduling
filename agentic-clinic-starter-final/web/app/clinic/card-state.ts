@@ -22,7 +22,14 @@ export type CardModel = {
   pills: string[];
   // For a "moving" ghost: where the draft puts the session.
   movedTo?: CardSession;
+  // A client-side preview of an option the admin is considering. Not saved.
+  preview?: boolean;
+  // The conflict open in the side panel.
+  selected?: boolean;
 };
+
+// The change a selected option would stage, drawn on the grid without the server.
+export type CardPreview = { kind: "assign" | "cancel"; sessionId: string; therapist?: string };
 
 export type CardInput = {
   // The pod's sessions with its draft applied (what the calendar shows).
@@ -37,6 +44,8 @@ export type CardInput = {
   started: (session: CardSession) => boolean;
   // Also show the "Moving" ghost when only the therapist changes (Day view).
   ghostTherapistMoves: boolean;
+  preview?: CardPreview | null;
+  selectedId?: string | null;
 };
 
 export function buildCards(input: CardInput): CardModel[] {
@@ -46,7 +55,32 @@ export function buildCards(input: CardInput): CardModel[] {
     if (change.kind !== "add" && change.sessionId) changeById.set(change.sessionId, change);
   }
   const cards: CardModel[] = [];
+  const preview = input.preview;
   for (const session of input.candidate) {
+    if (preview?.sessionId === session.id) {
+      if (preview.kind === "cancel") {
+        cards.push({
+          key: `${session.id}:preview`,
+          kind: "cancelled",
+          session,
+          pills: ["Preview: cancel"],
+          preview: true,
+        });
+        continue;
+      }
+      const moved = { ...session, therapist: preview.therapist || session.therapist };
+      cards.push({ key: session.id, kind: "staged", session: moved, pills: ["Preview"], preview: true });
+      if (input.ghostTherapistMoves && moved.therapist !== session.therapist) {
+        cards.push({
+          key: `${session.id}:from`,
+          kind: "moving",
+          session,
+          pills: ["Moving"],
+          movedTo: moved,
+        });
+      }
+      continue;
+    }
     const original = saved.get(session.id);
     const staged = !original || changeById.has(session.id);
     const issue = input.issueIds.has(session.id);
@@ -85,6 +119,9 @@ export function buildCards(input: CardInput): CardModel[] {
     } else {
       cards.push({ key: session.id, kind: "committed", session, pills: [] });
     }
+  }
+  for (const card of cards) {
+    if (card.session.id === input.selectedId && card.kind !== "moving") card.selected = true;
   }
   for (const change of input.changes) {
     if (change.kind !== "cancel" || !change.sessionId) continue;

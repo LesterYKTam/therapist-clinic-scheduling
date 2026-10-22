@@ -3,22 +3,18 @@
 import type { CSSProperties } from "react";
 // @ts-expect-error The JavaScript scheduling policy is verified in the Node suite.
 import { localInstant } from "../../lib/scheduling.mjs";
-import { buildCards, type CardModel } from "./card-state";
+import { buildCards, type CardModel, type CardPreview } from "./card-state";
 import { hiddenSummary, layoutColumn } from "./grid-collapse";
 import { assignLanes, formatMinutes, hourRange, leaveBlocks, toMinutes } from "./grid-layout";
 import { nameOf as lookup } from "./names";
+import { formatDay } from "./resolve-model";
 import type { ClinicState, Session } from "./types";
+
+export { formatDay };
 
 export type CalendarView = "day" | "week";
 
 const HOUR_PX = 64;
-const dayHeading = new Intl.DateTimeFormat("en-CA", {
-  timeZone: "UTC",
-  weekday: "short",
-  month: "short",
-  day: "numeric",
-});
-export const formatDay = (date: string) => dayHeading.format(new Date(`${date}T00:00:00Z`));
 
 // "Morgan Testerson" -> "Morgan T."
 const shortName = (name: string) => {
@@ -48,6 +44,8 @@ export function TimeGrid({
   today,
   readOnly,
   editingPod,
+  preview = null,
+  selectedId = null,
   onSelect,
   onEdit,
   onOpenDay,
@@ -60,6 +58,8 @@ export function TimeGrid({
   today: string;
   readOnly: boolean;
   editingPod: string | null;
+  preview?: CardPreview | null;
+  selectedId?: string | null;
   onSelect: (sessionId: string) => void;
   onEdit: (session: Session) => void;
   onOpenDay: (date: string) => void;
@@ -82,11 +82,16 @@ export function TimeGrid({
     historicalIds: alertIds(state.historicalAlerts),
     started: (item) => localInstant(item.date, item.time, tz) < Date.now(),
     ghostTherapistMoves: view === "day",
+    preview,
+    selectedId,
   }).filter((card) => days.includes(card.session.date));
 
   const open = (item: Session) => {
     if (readOnly) return;
-    if (
+    // An open conflict always opens its guided view in the side panel.
+    if (alertIds(state.conflicts).has(item.id)) {
+      onSelect(item.id);
+    } else if (
       editingPod ||
       draft ||
       localInstant(item.date, item.time, tz) < Date.now() ||
@@ -319,7 +324,7 @@ function SessionCard({
     width: `calc(${100 / placement.lanes}% - 4px)`,
   };
   const conflictToo = card.kind === "staged" && card.pills.includes("Conflict");
-  const className = `session-card is-${card.kind}${conflictToo ? " has-conflict" : ""}`;
+  const className = `session-card is-${card.kind}${conflictToo ? " has-conflict" : ""}${card.preview ? " is-preview" : ""}${card.selected ? " is-selected" : ""}`;
   const content = (
     <>
       <span className="card-body">

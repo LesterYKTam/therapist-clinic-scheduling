@@ -24,8 +24,8 @@ export function AutoResolveProposal({
 }) {
   const session = (id: string) => sessions.find((item) => item.id === id);
   return (
-    <div className="person" aria-label="Auto resolve proposal">
-      <h3>Auto resolve proposal · {proposal.proposed.length} changed sessions</h3>
+    <section className="resolve-card proposal-card" aria-label="Auto resolve proposal">
+      <h2>Auto resolve proposal · {proposal.proposed.length} changed sessions</h2>
       <p>Review all suggested moves. Nothing in the committed calendar has changed.</p>
       {proposal.proposed.length ? (
         <ol>
@@ -43,7 +43,7 @@ export function AutoResolveProposal({
       ) : (
         <p>No safe automatic changes were found.</p>
       )}
-      <h3>Still unresolved · {proposal.unresolved.length}</h3>
+      <h3 className="options-head">Still unresolved · {proposal.unresolved.length}</h3>
       {proposal.unresolved.length ? (
         <ol>
           {proposal.unresolved.map((item: any) => (
@@ -70,8 +70,7 @@ export function AutoResolveProposal({
         </p>
       )}
       {!readOnly && (
-        <div className="calendar-actions">
-          <button onClick={() => void onDiscard(pod)}>Discard suggestions</button>
+        <div className="detail-actions">
           <button
             className="primary"
             disabled={state.proposalStale?.[pod] || !proposal.proposed.length}
@@ -79,8 +78,9 @@ export function AutoResolveProposal({
           >
             Apply to draft
           </button>
+          <button onClick={() => void onDiscard(pod)}>Discard suggestions</button>
         </div>
       )}
-    </div>
+    </section>
   );
 }

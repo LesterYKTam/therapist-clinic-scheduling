@@ -208,10 +208,13 @@ export function useClinicActions(clinic: Clinic) {
 
   const commitSharedDraft = (pod: string) =>
     perform(async () => {
+      const count = state.drafts?.find((item) => item.pod === pod)?.changes.length ?? 0;
       await call({ action: "commit-draft", pod, revision: state.revision });
       clearEditingPod();
       await reload();
-      setNotice("Shared draft committed to the calendar.");
+      setNotice(
+        `${count} ${count === 1 ? "change" : "changes"} committed. Notification tasks were added to the worklist. Nothing is sent automatically.`,
+      );
     });
 
   const discardSharedDraft = (pod: string) =>

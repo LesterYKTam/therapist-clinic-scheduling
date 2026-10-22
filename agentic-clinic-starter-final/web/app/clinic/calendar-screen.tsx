@@ -4,13 +4,14 @@ import { useEffect, useState, type ReactNode } from "react";
 // @ts-expect-error The JavaScript scheduling policy is verified in the Node suite.
 import { draftCandidate } from "../../lib/scheduling.mjs";
 import { CalendarHeader, CalendarTools } from "./calendar-toolbar";
-import { ConflictPanel } from "./conflict-panel";
 import { defaultEndDate, nextBookingDate, startOfWeek, today } from "./dates";
-import { DraftPanel } from "./draft-panel";
 import { LeaveForm } from "./leave-form";
 import { LeavePanel } from "./leave-panel";
 import { NotificationPanel } from "./notification-panel";
 import { PreviewDialog } from "./preview-dialog";
+import { ResolvePanel } from "./resolve-panel";
+import { openConflicts, previewChange } from "./resolve-model";
+import { optionCardsFor } from "./conflict-detail";
 import { SessionDialog } from "./session-dialog";
 import type { ClinicActions } from "./use-clinic-actions";
 import type { Clinic } from "./use-clinic";
@@ -120,6 +121,18 @@ export function CalendarScreen({
   const [entryOpen, setEntryOpen] = useState(false);
   const [leaveOpen, setLeaveOpen] = useState(false);
   const [selection, setSelection] = useState<Selection | null>(null);
+  // The conflict open in the guided panel, and the option being previewed on the grid.
+  const [resolveId, setResolveId] = useState<string | null>(null);
+  const [optionKey, setOptionKey] = useState<string | null>(null);
+  const selectConflict = (sessionId: string | null) => {
+    setResolveId(sessionId);
+    // Show the conflict on the grid: its day in Day view, its week in Week view.
+    const date = (state.conflicts || []).find((item: any) => item.sessionId === sessionId)?.session.date;
+    if (date) setAnchor(date);
+    setOptionKey(null);
+  };
+  // Another pod is a different list of conflicts; drop the selection.
+  useEffect(() => selectConflict(null), [pod]);
   const todayDate = today(state.config.timezone);
   // One day at a time, skipping closed days that have no sessions.
   const stepDay = (direction: number) => {
@@ -173,11 +186,29 @@ export function CalendarScreen({
     (item: { client: string }) =>
       state.clients.find((c) => c.id === item.client)?.pod === pod,
   );
+  const draftNow = state.drafts?.find((item) => item.pod === pod);
+  const open = openConflicts(
+    state.conflicts || [],
+    state.clients,
+    pod,
+    draftNow,
+    (state.draftIssues?.[pod] || []).map((item: { sessionId: string }) => item.sessionId),
+  );
+  const resolving = readOnly || draftNow?.proposal ? undefined : open.find((item) => item.sessionId === resolveId);
+  // Overlay only: the selected option drawn on the grid. Nothing is sent to the server.
+  const previewed = resolving
+    ? previewChange(optionCardsFor(state, pod, resolving.session), optionKey)
+    : null;
   const submit = async () => {
     if (await previewDraft()) setEntryOpen(false);
   };
   const choose = (sessionId: string, openOptions: boolean) =>
     setSelection({ sessionId, openOptions, key: Date.now() });
+  // A grid card: an open conflict opens the guided view, anything else the manual forms.
+  const selectCard = (sessionId: string) => {
+    if (open.some((item) => item.sessionId === sessionId)) selectConflict(sessionId);
+    else choose(sessionId, false);
+  };
   return (
     <>
       <CalendarHeader
@@ -209,24 +240,24 @@ export function CalendarScreen({
           }}
           readOnly={readOnly}
           editingPod={editingPod}
-          onSelect={(sessionId) => choose(sessionId, false)}
+          preview={previewed}
+          selectedId={resolving?.sessionId || null}
+          onSelect={selectCard}
           onEdit={(item) => {
             beginEdit(item);
             setEntryOpen(true);
           }}
         />
         <div>
-          <ConflictPanel
+          <ResolvePanel
             state={state}
             pod={pod}
             readOnly={readOnly}
-            onRecheck={recheckConflicts}
-            onChoose={choose}
-          />
-          <DraftPanel
-            state={state}
-            pod={pod}
-            readOnly={readOnly}
+            sessions={events}
+            selectedId={resolveId}
+            optionKey={optionKey}
+            onSelect={selectConflict}
+            onOption={setOptionKey}
             onStage={stageDraft}
             onRemove={removeDraftChange}
             onPreviewAuto={previewAutoResolve}

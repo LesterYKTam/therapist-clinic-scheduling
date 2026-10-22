@@ -69,10 +69,12 @@ try {
   await shot('01-calendar-conflicts.png');
 
   // 2. Auto resolve proposal: every change with its reason, nothing committed yet.
-  if (!(await clickText('Auto resolve'))) throw new Error('Auto resolve button not found');
+  if (!(await clickText('Auto resolve all'))) throw new Error('Auto resolve all button not found');
   await waitFor(hasText('Auto resolve proposal'), 'proposal');
   await shot('02-auto-resolve-proposal.png');
-  await clickText('Discard draft');
+  await clickText('Discard suggestions');
+  await sleep(800);
+  await clickText('Discard');
   await sleep(800);
 
   // 3. Read-only view of the other pod.

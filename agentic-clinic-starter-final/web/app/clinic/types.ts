@@ -76,6 +76,8 @@ export type ClinicState = {
   draftIssues?: Record<string, any[]>;
   proposalStale?: Record<string, boolean>;
   workableOptions?: Record<string, any[]>;
+  // Per issue session: active room ids free for its time across ALL pods (server-computed).
+  roomsFree?: Record<string, string[]>;
   notifications?: any[];
   viewPod?: string;
   assignedPod?: string;

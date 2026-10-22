@@ -981,7 +981,7 @@ Description: Conflict list, then conflict detail (client, therapists at that hou
 Source / reason: Reschedule Flow mockup v3; D-B021
 Acceptance criteria: The options and their order come only from the existing engine. There are no automatic time changes. Nothing is committed before Commit. Tests cover the panel's use of the engine options.
 Priority: P1
-Status: READY
+Status: DONE (2026-10-22). Guided resolve panel: conflicts list, then detail with facts, then engine-only rank-ordered options, preview, add to draft, and a Draft panel; Auto resolve all kept; More edits keeps all old tools; roomsFree computed clinic-wide by the server. 122/122 tests pass. QA signed-in pass: options match the engine for all 5 conflicts, roomsFree correct across pods, full commit flow, read-only locked. 7 follow-up fixes applied.
 Sprint: S8
 Dependencies: UX-012
 Discovery class: ADJACENT
