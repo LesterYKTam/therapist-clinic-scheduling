@@ -18,6 +18,15 @@ export default function ClinicClient({
   const clinic = useClinic(initial, authenticated);
   const actions = useClinicActions(clinic);
   const { state, screen, setScreen, editingPod, calendarPod, readOnly } = clinic;
+  const conflictStatus = (
+    <ConflictStatus
+      count={clinic.podConflictCount}
+      onOpen={() => {
+        setScreen("calendar");
+        void actions.recheckConflicts();
+      }}
+    />
+  );
   return (
     <main className="workspace">
       <Sidebar
@@ -25,16 +34,12 @@ export default function ClinicClient({
         setScreen={setScreen}
         editingPod={editingPod}
         authenticated={authenticated}
-        podLabel={state.pods.find((item) => item.id === calendarPod)?.name}
+        state={state}
+        pod={calendarPod}
+        setPod={clinic.switchPod}
       />
       <section className="content">
-        <ConflictStatus
-          count={clinic.podConflictCount}
-          onOpen={() => {
-            setScreen("calendar");
-            void actions.recheckConflicts();
-          }}
-        />
+        {screen !== "calendar" && conflictStatus}
         <Notices
           readOnly={readOnly}
           state={state}
@@ -47,7 +52,7 @@ export default function ClinicClient({
             {...actions}
             state={state}
             pod={calendarPod}
-            setPod={clinic.switchPod}
+            conflictStatus={conflictStatus}
             readOnly={readOnly}
             draft={clinic.draft}
             setDraft={clinic.setDraft}

@@ -957,7 +957,7 @@ Description: Light sidebar with the pod name and role under the logo, a "View po
 Source / reason: Stillwell design guide; D-B021
 Acceptance criteria: Matches the guide's Sidebar and Header sections. The read-only view still works from the sidebar control.
 Priority: P1
-Status: READY
+Status: DONE (2026-10-22). Light sticky sidebar with pod context and View pod, nav items, header actions and a conflict pill. 91/91 tests pass. QA visual, keyboard, contrast, responsive and regression pass; 4 minor findings fixed. Dialog accessibility logged as UX-015.
 Sprint: S8
 Dependencies: UX-010
 Discovery class: ADJACENT
@@ -996,4 +996,16 @@ Priority: P2
 Status: READY
 Sprint: S8
 Dependencies: UX-013
+Discovery class: ADJACENT
+
+### UX-015
+Type: STORY
+Title: Accessible dialogs: focus, trap, Escape
+Description: The Add session, leave, preview and workable-options dialogs have no role="dialog" or aria-modal. Focus doesn't move into a dialog when it opens, Tab walks out into the page behind, and Escape does nothing. This predates the redesign; QA found it during the phase 1–2 pass.
+Source / reason: QA review of UX-010/UX-011, 2026-10-22
+Acceptance criteria: Every dialog has role="dialog", aria-modal and an accessible name. Focus moves to the first field when it opens, Tab is trapped inside, Escape closes it like Cancel, and focus returns to the button that opened it. Verified by keyboard in a real browser. No behaviour change otherwise.
+Priority: P2
+Status: READY
+Sprint: S8
+Dependencies: UX-011
 Discovery class: ADJACENT

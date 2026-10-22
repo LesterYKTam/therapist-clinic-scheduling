@@ -10,22 +10,43 @@ export function Sidebar({
   setScreen,
   editingPod,
   authenticated,
-  podLabel,
+  state,
+  pod,
+  setPod,
 }: {
   screen: Screen;
   setScreen: (screen: Screen) => void;
   editingPod: string | null;
   authenticated: boolean;
-  podLabel?: string;
+  state: ClinicState;
+  pod: string;
+  setPod: (id: string) => void;
 }) {
+  // Authenticated: the admin's assigned pod; demo mode: the selected pod.
+  const contextPod = authenticated && state.assignedPod ? state.assignedPod : pod;
+  const contextName = (state.allPods || state.pods).find((item) => item.id === contextPod)?.name || "Selected pod";
   return (
-    <aside>
+    <nav className="sidebar" aria-label="Main">
       <div className="brand">Stillwell</div>
-      <p>CLINIC WORKSPACE</p>
+      <div className="sidebar-context">{contextName} · Admin</div>
+      <label className="sidebar-pod">
+        View pod
+        <select value={pod} disabled={!!editingPod} onChange={(e) => setPod(e.target.value)}>
+          {(state.allPods || state.pods).map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.name}
+              {authenticated && state.assignedPod && item.id !== state.assignedPod
+                ? " (read-only)"
+                : ""}
+            </option>
+          ))}
+        </select>
+      </label>
       {SCREENS.map((item) => (
         <button
           key={item}
           className={screen === item ? "nav active" : "nav"}
+          aria-current={screen === item ? "page" : undefined}
           disabled={!!editingPod && item !== "calendar"}
           onClick={() => setScreen(item)}
         >
@@ -34,8 +55,11 @@ export function Sidebar({
       ))}
       {authenticated && (
         <>
-          <a href="/config/admins">Admin configuration</a>
+          <a className="nav" href="/config/admins">
+            Admin configuration
+          </a>
           <button
+            className="sidebar-signout"
             onClick={async () => {
               await authClient.signOut();
               window.location.assign("/sign-in");
@@ -45,10 +69,7 @@ export function Sidebar({
           </button>
         </>
       )}
-      <small>
-        {podLabel || "Selected pod"} · {authenticated ? "Admin" : "Local admin"}
-      </small>
-    </aside>
+    </nav>
   );
 }
 

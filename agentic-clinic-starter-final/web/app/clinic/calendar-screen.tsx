@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 // @ts-expect-error The JavaScript scheduling policy is verified in the Node suite.
 import { draftCandidate } from "../../lib/scheduling.mjs";
 import { CalendarHeader, CalendarTools } from "./calendar-toolbar";
@@ -52,7 +52,7 @@ type CalendarScreenProps = Pick<
     | "handleNotification"
   > & {
     pod: string;
-    setPod: (id: string) => void;
+    conflictStatus: ReactNode;
   };
 
 // The week grid plus the side panels (conflicts, shared draft, notifications,
@@ -60,7 +60,7 @@ type CalendarScreenProps = Pick<
 export function CalendarScreen({
   state,
   pod,
-  setPod,
+  conflictStatus,
   draft,
   setDraft,
   previewDraft,
@@ -140,17 +140,13 @@ export function CalendarScreen({
   return (
     <>
       <CalendarHeader
-        editingPod={editingPod}
+        conflictStatus={conflictStatus}
         readOnly={readOnly}
         onRecordLeave={() => setLeaveOpen(true)}
         onRecheck={recheckConflicts}
         onAdd={beginAdd}
       />
       <CalendarTools
-        state={state}
-        pod={pod}
-        editingPod={editingPod}
-        setPod={setPod}
         onPrevious={() => setWeek(startOfWeek(dateAt(-7), weekStart))}
         onToday={() => setWeek(startOfWeek(today(state.config.timezone), weekStart))}
         onNext={() => setWeek(startOfWeek(dateAt(7), weekStart))}
